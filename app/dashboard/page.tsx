@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
-import ProfileSetup from '../../components/dashboard/profile';
+
 
 
 // Types

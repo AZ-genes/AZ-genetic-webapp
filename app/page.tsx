@@ -44,7 +44,7 @@ export default function Home() {
                 for secure, private storage and management of genetic and health data.
               </p>
               <div className="flex justify-center space-x-4">
-                <a href="/sign-in" className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition duration-300">
+                <a href='/sign-in' className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition duration-300">
                   Start Free Trial
                 </a>
                 <button className="border border-indigo-600 text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-indigo-50 transition duration-300">
