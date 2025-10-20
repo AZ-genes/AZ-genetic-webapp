@@ -1,118 +1,82 @@
 "use client";
 import React, { useState } from "react";
-
-type UserType = "doctor" | "individual" | "professional";
+import { supabase } from "@/lib/supabase";
 
 const SignUp: React.FC = () => {
-    const [userType, setUserType] = useState<UserType>("individual");
-    const [form, setForm] = useState({
-        name: "",
-        email: "",
-        password: "",
-    });
+    const [email, setEmail] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState("");
+    const [error, setError] = useState("");
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setForm({ ...form, [e.target.name]: e.target.value });
-    };
-
-    const handleUserTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setUserType(e.target.value as UserType);
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSignUp = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Handle sign up logic here
-        console.log({ ...form, userType });
+        setLoading(true);
+        setError("");
+        setMessage("");
+
+        try {
+            const { error } = await supabase.auth.signInWithOtp({
+                email,
+                options: {
+                    emailRedirectTo: `${window.location.origin}/auth/callback`,
+                },
+            });
+
+            if (error) {
+                setError(error.message);
+            } else {
+                setMessage("Check your email for the magic link!");
+            }
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <div className="max-w-md mx-auto mt-10 p-6 border rounded shadow">
-            <h2 className="text-2xl font-bold mb-6 text-center">Sign Up</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                    <label className="block mb-2 font-medium">Account Type</label>
-                    <div className="flex gap-4">
-                        <label>
-                            <input
-                                type="radio"
-                                name="userType"
-                                value="doctor"
-                                checked={userType === "doctor"}
-                                onChange={handleUserTypeChange}
-                            />
-                            <span className="ml-2">Doctor</span>
-                        </label>
-                        <label>
-                            <input
-                                type="radio"
-                                name="userType"
-                                value="individual"
-                                checked={userType === "individual"}
-                                onChange={handleUserTypeChange}
-                            />
-                            <span className="ml-2">Individual</span>
-                        </label>
-                        <label>
-                            <input
-                                type="radio"
-                                name="userType"
-                                value="professional"
-                                checked={userType === "professional"}
-                                onChange={handleUserTypeChange}
-                            />
-                            <span className="ml-2">Professional</span>
-                        </label>
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-200">
+            <div className="bg-white shadow-lg rounded-lg px-8 py-10 w-full max-w-md">
+                <h2 className="text-3xl font-bold text-center text-indigo-700 mb-6">Sign Up</h2>
+                <form onSubmit={handleSignUp} className="space-y-5">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input
+                            type="email"
+                            className="w-full px-4 py-2 border text-gray-600 outline-none rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            required
+                            autoComplete="email"
+                            placeholder="Enter your email"
+                        />
                     </div>
+                    
+                    {error && (
+                        <div className="text-red-500 text-sm text-center p-2 bg-red-50 rounded">{error}</div>
+                    )}
+                    
+                    {message && (
+                        <div className="text-green-600 text-sm text-center p-2 bg-green-50 rounded">{message}</div>
+                    )}
+                    
+                    <button
+                        type="submit"
+                        className={`w-full py-2 rounded-lg bg-indigo-600 text-white font-semibold transition ${
+                            loading ? "opacity-60 cursor-not-allowed" : "hover:bg-indigo-700"
+                        }`}
+                        disabled={loading}
+                    >
+                        {loading ? "Sending magic link..." : "Send Magic Link"}
+                    </button>
+                </form>
+                <div className="mt-6 text-center text-sm text-gray-600">
+                    Already have an account?{" "}
+                    <a href="/sign-in" className="text-indigo-600 hover:underline font-medium">
+                        Sign In
+                    </a>
                 </div>
-                <div>
-                    <label className="block mb-2 font-medium" htmlFor="name">
-                        Name
-                    </label>
-                    <input
-                        className="w-full border px-3 py-2 rounded"
-                        type="text"
-                        id="name"
-                        name="name"
-                        value={form.name}
-                        onChange={handleChange}
-                        required
-                    />
-                </div>
-                <div>
-                    <label className="block mb-2 font-medium" htmlFor="email">
-                        Email
-                    </label>
-                    <input
-                        className="w-full border px-3 py-2 rounded"
-                        type="email"
-                        id="email"
-                        name="email"
-                        value={form.email}
-                        onChange={handleChange}
-                        required
-                    />
-                </div>
-                <div>
-                    <label className="block mb-2 font-medium" htmlFor="password">
-                        Password
-                    </label>
-                    <input
-                        className="w-full border px-3 py-2 rounded"
-                        type="password"
-                        id="password"
-                        name="password"
-                        value={form.password}
-                        onChange={handleChange}
-                        required
-                    />
-                </div>
-                <button
-                    type="submit"
-                    className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-                >
-                    Sign Up
-                </button>
-            </form>
+            </div>
         </div>
     );
 };
