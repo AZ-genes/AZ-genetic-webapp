@@ -1,0 +1,8 @@
+##fileformat=VCF
+##filedate=20251030
+##source=TestData
+##reference=GRCh38
+##INFO=<ID=TEST,Number=1,Type=String,Description="Test genetic data">
+#CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO
+chr1    1000    test1   A       T       60      PASS    TEST=test_data
+chr1    2000    test2   G       C       60      PASS    TEST=test_data
