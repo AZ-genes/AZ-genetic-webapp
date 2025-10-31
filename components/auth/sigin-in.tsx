@@ -18,21 +18,13 @@ const SignIn: React.FC = () => {
     const router = useRouter();
 
     useEffect(() => {
-        if (typeof window !== 'undefined' && !recaptchaVerifier) {
-            const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-                'size': 'invisible',
-                'callback': (response: any) => {
-                    // reCAPTCHA solved, allow signInWithPhoneNumber.
-                },
-                'expired-callback': () => {
-                    // Response expired. Ask user to solve reCAPTCHA again.
-                    setError("reCAPTCHA expired. Please try again.");
-                }
-            });
-            verifier.render().then((widgetId) => {
+        // This useEffect is no longer needed for RecaptchaVerifier initialization
+        // as it's moved to handleOtpRequest.
+        // However, we keep it to ensure recaptchaVerifier is rendered if it was already set.
+        if (recaptchaVerifier && typeof window !== 'undefined') {
+            recaptchaVerifier.render().then((widgetId) => {
                 // console.log('reCAPTCHA rendered', widgetId);
             });
-            setRecaptchaVerifier(verifier);
         }
     }, [recaptchaVerifier]);
 
@@ -62,15 +54,23 @@ const SignIn: React.FC = () => {
         setError("");
         setMessage("");
         try {
-            const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-                'size': 'invisible',
-                'callback': (response: any) => {
-                    // reCAPTCHA solved, allow signInWithPhoneNumber.
-                    // Not needed for invisible reCAPTCHA
-                }
-            });
-            setRecaptchaVerifier(verifier);
-            const confirmation = await signInWithPhoneNumber(auth, phoneNumber, verifier);
+            // Initialize RecaptchaVerifier here, ensuring the container is in the DOM
+            if (!recaptchaVerifier && typeof window !== 'undefined') {
+                const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                    'size': 'invisible',
+                    'callback': (response: any) => {
+                        // reCAPTCHA solved, allow signInWithPhoneNumber.
+                        // Not needed for invisible reCAPTCHA
+                    },
+                    'expired-callback': () => {
+                        setError("reCAPTCHA expired. Please try again.");
+                    }
+                });
+                await verifier.render(); // Render the verifier
+                setRecaptchaVerifier(verifier);
+            }
+
+            const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier!);
             setConfirmationResult(confirmation);
             setSignInMethod('otp_sent'); // Set sign-in method to 'otp_sent'
             setMessage("OTP sent to your phone number!");

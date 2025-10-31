@@ -21,6 +21,24 @@ export async function withAuth(
         const testClient = createTestClient();
         context.firestore = testClient.firestore;
         context.storage = testClient.storage;
+        context.auth = testClient.auth; // Add this line
+      }
+      // In skipAuth mode, we still need to mock the user based on the token
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        throw new Error('No authorization header in skipAuth mode');
+      }
+      const token = authHeader.replace('Bearer ', '');
+
+      // Mock user based on token for test environment
+      if (token === 'f1-token') {
+        context.user = { uid: 'test-auth-id-F1', email: 'f1user@example.com', tier: 'F1' };
+      } else if (token === 'f2-token') {
+        context.user = { uid: 'test-auth-id-F2', email: 'f2user@example.com', tier: 'F2' };
+      } else if (token === 'f3-token') {
+        context.user = { uid: 'test-auth-id-F3', email: 'f3user@example.com', tier: 'F3' };
+      } else {
+        throw new Error('Invalid mock token in skipAuth mode');
       }
       return await handler(req, context);
     }

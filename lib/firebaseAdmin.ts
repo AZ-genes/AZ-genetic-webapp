@@ -1,10 +1,6 @@
 import * as admin from 'firebase-admin';
 
 // Initialize Firebase Admin SDK using environment variables.
-// Required envs:
-// - FIREBASE_PROJECT_ID
-// - FIREBASE_CLIENT_EMAIL
-// - FIREBASE_PRIVATE_KEY (with \n preserved)
 
 if (!admin.apps.length) {
   const projectId = process.env.FIREBASE_PROJECT_ID || 'az-genes-1ca88';

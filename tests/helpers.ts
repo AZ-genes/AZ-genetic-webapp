@@ -1,50 +1,15 @@
 import { beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { startMockApiServer, stopMockApiServer } from './mockServer';
 import { auth } from '../lib/firebase';
+import { createTestClient } from '../src/functions/edge/utils'; // Import createTestClient
 
-// Environment setup for testing
-export function setupTestMode() {
-  // For test mode, we'll validate the environment instead of trying to set it
-  const required = {
-    SKIP_AUTH_IN_TEST: 'true',
-    NODE_ENV: 'test'
-  };
-
-  let missingEnv = false;
-  Object.entries(required).forEach(([key, value]) => {
-    if (process.env[key] !== value) {
-      console.warn(`Warning: ${key} should be set to "${value}" for offline testing`);
-      missingEnv = true;
-    }
-  });
-
-  if (missingEnv) {
-    console.warn('Some required environment variables are not set correctly. Tests may fail.');
-  }
-}
-
-// Reset mock data once and start mock server. We avoid clearing repeatedly because Vitest
-// may run multiple test files in the same worker and clearing in each file would
-// remove sessions created by other suites.
-let __helpersInitialized = false;
-
-// Setup before all tests
-beforeAll(async () => {
-  if (!__helpersInitialized) {
-    __helpersInitialized = true;
-
-    // Setup test environment
-    setupTestMode();
-  }
-
-  // Start mock API server for offline testing
-  await startMockApiServer(3000);
-});
+// ... (rest of the file)
 
 // Reset mocks between each test
 beforeEach(() => {
   // Reset mock call counters but keep user data
   vi.clearAllMocks();
+  createTestClient().reset(); // Reset mock Firestore data for each test
 });
 
 afterAll(async () => {
@@ -83,7 +48,7 @@ export async function setupTestUser(userConfig: typeof testUsers.f1User) {
   const authId = `test-auth-id-${userConfig.tier}`;
   const userId = `test-user-id-${userConfig.tier}`;
   return {
-    token: 'valid-token',
+    token: `${userConfig.tier.toLowerCase()}-token`,
     userId,
     authId
   };
