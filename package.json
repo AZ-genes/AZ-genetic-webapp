@@ -1,0 +1,38 @@
+{
+  "name": "az-genes",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "test": "node scripts/test.mjs",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@hashgraph/hedera-wallet-connect": "^2.0.3",
+    "@hashgraph/sdk": "^2.76.0",
+    "@reown/appkit": "^1.7.16",
+    "@walletconnect/modal": "^2.7.0",
+    "firebase": "^12.5.0",
+    "firebase-admin": "^12.1.1",
+    "next": "15.5.4",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/dotenv": "^6.1.1",
+    "@types/node": "^20.19.24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitest/ui": "^4.0.5",
+    "dotenv": "^17.2.3",
+    "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5",
+    "vitest": "^4.0.5"
+  }
+}
