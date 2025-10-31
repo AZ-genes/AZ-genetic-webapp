@@ -52,7 +52,7 @@ const web3Modal = new WalletConnectModal({
   },
 });
 
-export const HederaWalletProvider = ({ children }: { children: ReactNode }): JSX.Element => {
+export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
   const [dAppConnector, setDAppConnector] = useState<DAppConnector | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [accountId, setAccountId] = useState<AccountId | null>(null);
@@ -74,8 +74,8 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }): JSX
       setDAppConnector(connector);
 
       // Check for existing session
-      if (connector.activeSession) {
-        const { topic, peer } = connector.activeSession;
+      if ((connector as any).activeSession) {
+        const { topic, peer } = (connector as any).activeSession;
         const chainId = peer.namespaces.hedera?.chains?.[0] as HederaChainId;
         const accounts = peer.namespaces.hedera?.accounts || [];
         if (accounts.length > 0 && chainId) {
@@ -90,7 +90,7 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }): JSX
           setIsConnected(true);
           setAccountId(connectedAccountId);
           setNetwork(connectedNetwork);
-          setClient(Client.forLedgerId(connectedNetwork).setWallet(connector));
+          setClient((Client as any).forLedgerId(connectedNetwork).setWallet(connector));
         }
       }
     };
@@ -101,11 +101,11 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }): JSX
   const connectWallet = useCallback(async () => {
     if (!dAppConnector) return;
     try {
-      await dAppConnector.openModal();
-      console.log("dAppConnector.activeSession:", dAppConnector.activeSession);
+      await (dAppConnector as any).openModal();
+      console.log("dAppConnector.activeSession:", (dAppConnector as any).activeSession);
 
-      if (dAppConnector.activeSession) {
-        const { topic, peer } = dAppConnector.activeSession;
+      if ((dAppConnector as any).activeSession) {
+        const { topic, peer } = (dAppConnector as any).activeSession;
         const chainId = peer.namespaces.hedera?.chains?.[0] as HederaChainId;
         const accounts = peer.namespaces.hedera?.accounts || [];
 
@@ -122,7 +122,7 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }): JSX
           console.log("isConnected after successful connection:", true);
           setAccountId(connectedAccountId);
           setNetwork(connectedNetwork);
-          setClient(Client.forLedgerId(connectedNetwork).setWallet(dAppConnector));
+          setClient((Client as any).forLedgerId(connectedNetwork).setWallet(dAppConnector));
           console.log('Wallet connected:', connectedAccountId.toString(), connectedNetwork.toString());
         }
       } else {
@@ -139,7 +139,7 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }): JSX
 
   const disconnectWallet = useCallback(async () => {
     if (dAppConnector) {
-      await dAppConnector.killSession();
+      await (dAppConnector as any).killSession();
     }
     setIsConnected(false);
     setAccountId(null);
