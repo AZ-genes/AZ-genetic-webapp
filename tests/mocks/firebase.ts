@@ -1,23 +1,18 @@
 export function verifyMockToken(token: string) {
-  if (token === 'f1-token') {
+  const parts = token.split('-');
+  if (parts.length < 3) return null; // Expecting at least 'tier-token-uniqueId'
+
+  const tier = parts[0].toUpperCase(); // F1, F2, F3
+  const uniqueId = parts.slice(2).join('-'); // Rejoin if uniqueId itself contains hyphens
+
+  if (['F1', 'F2', 'F3'].includes(tier)) {
+    const uid = `test-auth-id-${tier}-${uniqueId}`;
+    const id = `test-auth-id-${tier}-${uniqueId}`;
     return {
-      uid: 'f1-user-id',
-      email: 'f1@example.com',
-      user_metadata: { subscription_tier: 'F1' }
-    };
-  }
-  if (token === 'f2-token') {
-    return {
-      uid: 'f2-user-id',
-      email: 'f2@example.com',
-      user_metadata: { subscription_tier: 'F2' }
-    };
-  }
-  if (token === 'f3-token') {
-    return {
-      uid: 'f3-user-id',
-      email: 'f3@example.com',
-      user_metadata: { subscription_tier: 'F3' }
+      uid,
+      id,
+      email: `${tier.toLowerCase()}@example.com`,
+      user_metadata: { subscription_tier: tier }
     };
   }
   return null;

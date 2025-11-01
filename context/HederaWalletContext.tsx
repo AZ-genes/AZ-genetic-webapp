@@ -36,21 +36,20 @@ if (!projectId) {
   throw new Error('You need to provide NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID env variable');
 }
 
+// Use current window location for metadata URL in browser, fallback otherwise
+const getMetadataUrl = () => {
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return 'https://az-genes.com';
+};
+
 const metadata = {
   name: 'AZ-Genes',
   description: 'A Hedera dApp for managing genetic data',
-  url: 'https://az-genes.com', // Replace with your dApp's URL
+  url: getMetadataUrl(),
   icons: ['https://avatars.githubusercontent.com/u/31002956'],
 };
-
-const web3Modal = new WalletConnectModal({
-  projectId,
-  chains: Object.values(HederaChainId),
-  themeMode: 'dark',
-  themeVariables: {
-    '--wcm-z-index': '1000',
-  },
-});
 
 export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
   const [dAppConnector, setDAppConnector] = useState<DAppConnector | null>(null);
@@ -58,8 +57,17 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
   const [accountId, setAccountId] = useState<AccountId | null>(null);
   const [network, setNetwork] = useState<LedgerId | null>(null);
   const [client, setClient] = useState<Client | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Only initialize on client side to avoid hydration mismatch
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
+    // Only initialize on client side after mount to avoid hydration mismatch
+    if (!isMounted) return;
+
     const initConnector = async () => {
       const connector = new DAppConnector(
         metadata,
@@ -96,7 +104,7 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
     };
 
     initConnector();
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, [isMounted]); // Run after mount
 
   const connectWallet = useCallback(async () => {
     if (!dAppConnector) return;

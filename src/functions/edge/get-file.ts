@@ -75,9 +75,11 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
       throw new Error('User profile not found');
     }
     const profile = profileDoc.data();
+    // Profile ID is the Firestore document ID
+    const profileId = profileDoc.id;
 
     // Check rate limit
-    if (!checkRateLimit(profile.id)) {
+    if (!checkRateLimit(profileId)) {
       throw new Error(`Download limit exceeded. Maximum ${MAX_DOWNLOADS_PER_HOUR} downloads per hour.`);
     }
 
@@ -98,9 +100,9 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
     const file = fileDoc.data();
 
     // Check access permissions
-    if (file.owner_id !== profile.id) {
+    if (file.owner_id !== profileId) {
       if (profile.subscription_tier === 'F2') {
-        const hasAccess = await verifyF2Access(firestore, fileId, profile.id);
+        const hasAccess = await verifyF2Access(firestore, fileId, profileId);
         if (!hasAccess) {
           throw new Error('Access denied');
         }
@@ -146,7 +148,7 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
       // Add audit log
       await firestore.collection('file_access_logs').add({
         file_id: fileId,
-        user_id: profile.id,
+        user_id: profileId,
         access_type: 'download',
         status: 'success'
       });
@@ -167,7 +169,7 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
       // Log decryption failure
       await firestore.collection('file_access_logs').add({
         file_id: fileId,
-        user_id: profile.id,
+        user_id: profileId,
         access_type: 'download',
         status: 'failed',
         error: 'Decryption failed'

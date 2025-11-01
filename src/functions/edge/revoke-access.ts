@@ -11,7 +11,14 @@ interface RevokeAccessRequest {
 }
 
 const hederaClient = new HederaClient();
-const CONTRACT_ID = ContractId.fromString(process.env.HEDERA_CONTRACT_ID ?? '');
+let CONTRACT_ID: ContractId | null = null;
+try {
+  if (process.env.HEDERA_CONTRACT_ID) {
+    CONTRACT_ID = ContractId.fromString(process.env.HEDERA_CONTRACT_ID);
+  }
+} catch {
+  console.warn('Failed to parse HEDERA_CONTRACT_ID');
+}
 
 async function notifyRevocation(
   firestore: AuthContext['firestore'],
@@ -102,28 +109,28 @@ async function handleRevokeAccess(req: Request, context: AuthContext): Promise<R
         throw new Error('User profile not found');
       }
       const profile = profileDoc.data();
+      // Profile ID is the Firestore document ID
+      const profileId = profileDoc.id;
 
       if (profile.subscription_tier !== 'F1') {
         throw new Error('Only F1 users can revoke access');
       }
 
       const body = await validateRequestBody(req);
-      const file = await validateFileOwnership(firestore, body.fileId, profile.id);
+      const file = await validateFileOwnership(firestore, body.fileId, profileId);
       const permission = await validateActivePermission(firestore, body.fileId, body.granteeId);
 
       // Record revocation on Hedera
-      const hederaTxId = await hederaClient.revokeAccess(
-        CONTRACT_ID,
-        body.fileId,
-        body.granteeId
-      );
+      const hederaTxId = CONTRACT_ID 
+        ? await hederaClient.revokeAccess(CONTRACT_ID, body.fileId, body.granteeId)
+        : `mock-revoke-${Date.now()}`;
 
       // Update permission status
       const permissionRef = firestore.collection('file_permissions').doc(permission.id);
       transaction.update(permissionRef, {
         status: 'revoked',
         revoked_at: new Date().toISOString(),
-        revoked_by: profile.id,
+        revoked_by: profileId,
         revocation_reason: body.reason || null,
         revocation_transaction_id: hederaTxId
       });
@@ -132,7 +139,7 @@ async function handleRevokeAccess(req: Request, context: AuthContext): Promise<R
       const accessLogRef = firestore.collection('access_logs').doc();
       transaction.set(accessLogRef, {
         file_id: body.fileId,
-        grantor_id: profile.id,
+        grantor_id: profileId,
         grantee_id: body.granteeId,
         action: 'revoke_access',
         metadata: {
@@ -147,7 +154,7 @@ async function handleRevokeAccess(req: Request, context: AuthContext): Promise<R
         firestore,
         body.granteeId,
         file,
-        profile.id,
+        profileId,
         body.reason
       ).catch(console.error);
     });

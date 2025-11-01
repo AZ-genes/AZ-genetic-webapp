@@ -28,8 +28,22 @@ async function handleDelete(req: Request, context: AuthContext): Promise<Respons
 
   const file = fileDoc.data();
 
+  // Get user profile to use profile.id
+  const profileRef = firestore.collection('user_profiles').doc(user.uid);
+  const profileDoc = await profileRef.get();
+
+  if (!profileDoc.exists) {
+    return new Response(JSON.stringify({ error: 'User profile not found' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 404
+    });
+  }
+
+  // Profile ID is the Firestore document ID
+  const profileId = profileDoc.id;
+
   // Only owner can delete
-  if (file.owner_id !== user.uid && file.owner_id !== user.id) {
+  if (file.owner_id !== profileId) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 403

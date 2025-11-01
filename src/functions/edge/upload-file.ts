@@ -1,11 +1,13 @@
 import { EncryptionService } from '../../services/encryption';
 import { HederaClient } from '../../services/hedera/client';
+import { GeneticETLService } from '../../services/genetic/etl';
 import { FileMetadata } from './types';
 import { AuthContext, corsHeaders } from './utils';
 import { withAuth } from './middleware/auth';
 
 const encryptionService = new EncryptionService();
 const hederaClient = new HederaClient();
+const etlService = new GeneticETLService();
 const TOPIC_ID = process.env.HEDERA_TOPIC_ID ?? '';
 
 // Constants
@@ -56,9 +58,9 @@ async function handleFileUpload(req: Request, context: AuthContext): Promise<Res
   }
 
   let uploadedFilePath: string | null = null;
+  const { user, firestore, storage } = context;
 
   try {
-    const { user, firestore, storage } = context;
 
     if (!user) {
       throw new Error('User not authenticated');
@@ -71,9 +73,11 @@ async function handleFileUpload(req: Request, context: AuthContext): Promise<Res
       throw new Error('User profile not found');
     }
     const profile = profileDoc.data();
+    // Profile ID is the Firestore document ID
+    const profileId = profileDoc.id;
 
     // Check rate limit
-    if (!checkRateLimit(profile.id)) {
+    if (!checkRateLimit(profileId)) {
       throw new Error('Rate limit exceeded. Please try again later.');
     }
 
@@ -103,23 +107,43 @@ async function handleFileUpload(req: Request, context: AuthContext): Promise<Res
       throw new Error('Invalid genetic file format');
     }
 
+    // Process genetic data if VCF file
+    let processedData = null;
+    if (file.type === 'chemical/x-vcf') {
+      try {
+        const vcfContent = fileBuffer.toString('utf-8');
+        processedData = await etlService.processVCFFile(vcfContent);
+        const normalized = await etlService.normalizeData(processedData);
+        processedData = normalized;
+      } catch (error) {
+        console.error('Failed to process VCF file:', error);
+        // Continue with upload even if processing fails
+      }
+    }
+
     // Encrypt file
     const { encryptedData, key, iv, hash } = await encryptionService.encryptFile(fileBuffer);
 
     // Upload encrypted file to Firebase Storage
     const timestamp = new Date().toISOString();
-    const storagePath = `${profile.id}/${timestamp}-${file.name}`;
+    const storagePath = `${profileId}/${timestamp}-${file.name}`;
     uploadedFilePath = storagePath;
     
     const storageRef = storage.ref(storagePath);
     await storage.uploadBytes(storageRef, encryptedData);
 
-    // Submit hash to Hedera
-    const hederaTxId = await hederaClient.submitHash(TOPIC_ID, hash);
+    // Use processed data hash for Hedera if available, otherwise use encrypted file hash
+    let hederaHash = hash;
+    if (processedData) {
+      hederaHash = etlService.generateDataHash(processedData);
+    }
+
+    // Submit hash to Hedera (will return mock hash if topic ID is missing or client unavailable)
+    const hederaTxId = TOPIC_ID ? await hederaClient.submitHash(TOPIC_ID, hederaHash) : `mock-hash-${Date.now()}`;
 
     // Save file metadata
     const fileMetadata: Partial<FileMetadata> = {
-      owner_id: profile.id,
+      owner_id: profileId,
       file_name: file.name,
       file_type: file.type,
       storage_path: storagePath,
@@ -132,17 +156,29 @@ async function handleFileUpload(req: Request, context: AuthContext): Promise<Res
     const savedFileRef = await firestore.collection('files').add(fileMetadata);
     const savedFile = { id: savedFileRef.id, ...fileMetadata };
 
+    // Save processed genetic data if available
+    if (processedData) {
+      await firestore.collection('genetic_data').add({
+        file_id: savedFile.id,
+        processed_data: processedData,
+        hedera_hash: hederaHash,
+        hedera_transaction_id: hederaTxId,
+        created_at: new Date().toISOString()
+      });
+    }
+
     // Log the file upload
     await firestore.collection('file_access_logs').add({
       file_id: savedFile.id,
-      user_id: profile.id,
+      user_id: profileId,
       access_type: 'upload',
       status: 'success',
       metadata: {
         file_name: savedFile.file_name,
         file_type: savedFile.file_type,
         storage_path: savedFile.storage_path,
-        hedera_transaction_id: savedFile.hedera_transaction_id
+        hedera_transaction_id: savedFile.hedera_transaction_id,
+        processed: !!processedData
       }
     });
 

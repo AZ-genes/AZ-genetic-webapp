@@ -22,7 +22,8 @@ export const storageAdapter = {
   async getBlob(ref: StorageRef): Promise<Blob> {
     const file = adminStorage.bucket().file(ref.fullPath);
     const [contents] = await file.download();
-    return new Blob([contents]);
+    // Convert Buffer to Blob-like object
+    return new Blob([new Uint8Array(contents)]) as Blob;
   },
 
   async getDownloadURL(ref: StorageRef): Promise<string> {

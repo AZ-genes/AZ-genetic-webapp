@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { testUsers, setupTestEnv, cleanupTestEnv } from './helpers';
+import { testUsers, setupTestEnv, cleanupTestEnv, setupTestUser, cleanupTestUser } from './helpers';
 import fs from 'fs';
 import path from 'path';
 
@@ -14,9 +14,29 @@ describe('Comprehensive API Tests', () => {
 
   beforeAll(async () => {
     createdUsers = await setupTestEnv();
-    f1Token = 'f1-token';
-    f2Token = 'f2-token';
-    f3Token = 'f3-token';
+    f1Token = createdUsers.f1User.token;
+    f2Token = createdUsers.f2User.token;
+    f3Token = createdUsers.f3User.token;
+  });
+
+  beforeEach(async () => {
+    // Upload a file before each test
+    const testFilePath = path.join(__dirname, 'fixtures', 'test.vcf');
+    const fileContent = await fs.promises.readFile(testFilePath);
+    const formData = new FormData();
+    formData.append('file', new Blob([fileContent], { type: 'chemical/x-vcf' }), 'test.vcf');
+
+    const response = await fetch(`${API_BASE_URL}/upload-file`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${f1Token}`
+      },
+      body: formData
+    });
+
+    expect(response.status).toBe(201);
+    const data = await response.json();
+    uploadedFileId = data.id;
   });
 
   afterAll(async () => {
@@ -39,23 +59,8 @@ describe('Comprehensive API Tests', () => {
 
   describe('File Upload Endpoint (/api/upload-file)', () => {
     it('should allow an F1 user to upload a file', async () => {
-      const testFilePath = path.join(__dirname, 'fixtures', 'test.vcf');
-      const fileContent = await fs.promises.readFile(testFilePath);
-      const formData = new FormData();
-      formData.append('file', new Blob([fileContent], { type: 'chemical/x-vcf' }), 'test.vcf');
-
-      const response = await fetch(`${API_BASE_URL}/upload-file`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${f1Token}`
-        },
-        body: formData
-      });
-
-      expect(response.status).toBe(201);
-      const data = await response.json();
-      uploadedFileId = data.id;
-      expect(data.file_name).toBe('test.vcf');
+      // File is uploaded in beforeAll hook
+      expect(uploadedFileId).toBeDefined();
     });
 
     it('should not allow an F2 user to upload a file', async () => {
@@ -77,6 +82,26 @@ describe('Comprehensive API Tests', () => {
   });
 
   describe('Grant Access Endpoint (/api/grant-access)', () => {
+    let localUploadedFileId: string;
+
+    beforeEach(async () => {
+      const testFilePath = path.join(__dirname, 'fixtures', 'test.vcf');
+      const fileContent = await fs.promises.readFile(testFilePath);
+      const formData = new FormData();
+      formData.append('file', new Blob([fileContent], { type: 'chemical/x-vcf' }), 'test.vcf');
+
+      const response = await fetch(`${API_BASE_URL}/upload-file`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${f1Token}`
+        },
+        body: formData
+      });
+
+      expect(response.status).toBe(201);
+      const data = await response.json();
+      localUploadedFileId = data.id;
+    });
     it('should allow an F1 user to grant access to an F2 user', async () => {
       const response = await fetch(`${API_BASE_URL}/grant-access`, {
         method: 'POST',
@@ -85,8 +110,8 @@ describe('Comprehensive API Tests', () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          fileId: uploadedFileId,
-          granteeId: createdUsers.f2User.userId,
+          fileId: localUploadedFileId,
+          granteeId: createdUsers.f2User.authId,
           accessLevel: 'read'
         })
       });
@@ -119,7 +144,7 @@ describe('Comprehensive API Tests', () => {
         },
         body: JSON.stringify({
           fileId: fileData.id,
-          granteeId: createdUsers.f2User.userId,
+          granteeId: createdUsers.f2User.authId,
           accessLevel: 'read'
         })
       });
@@ -136,7 +161,7 @@ describe('Comprehensive API Tests', () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          fileId: uploadedFileId,
+          fileId: localUploadedFileId,
           granteeId: createdUsers.f3User.userId,
           accessLevel: 'read'
         })
@@ -154,7 +179,7 @@ describe('Comprehensive API Tests', () => {
         },
         body: JSON.stringify({
           fileId: 'non-existent-file-id',
-          granteeId: createdUsers.f2User.userId,
+          granteeId: createdUsers.f2User.authId,
           accessLevel: 'read'
         })
       });
@@ -164,6 +189,22 @@ describe('Comprehensive API Tests', () => {
   });
 
   describe('Get File Endpoint (/api/get-file)', () => {
+    beforeEach(async () => {
+      // Grant access to F2 user for the uploaded file
+      const response = await fetch(`${API_BASE_URL}/grant-access`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${f1Token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fileId: uploadedFileId,
+          granteeId: createdUsers.f2User.authId,
+          accessLevel: 'read'
+        })
+      });
+      expect(response.status).toBe(201);
+    });
     it('should allow an F1 user to access their own file', async () => {
       const response = await fetch(`${API_BASE_URL}/get-file?fileId=${uploadedFileId}`, {
         headers: {
@@ -196,6 +237,22 @@ describe('Comprehensive API Tests', () => {
   });
 
   describe('Revoke Access Endpoint (/api/revoke-access)', () => {
+    beforeEach(async () => {
+      // Grant access to F2 user for the uploaded file before each revoke test
+      const response = await fetch(`${API_BASE_URL}/grant-access`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${f1Token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fileId: uploadedFileId,
+          granteeId: createdUsers.f2User.authId,
+          accessLevel: 'read'
+        })
+      });
+      expect(response.status).toBe(201);
+    });
     it('should allow an F1 user to revoke access to a file', async () => {
       const response = await fetch(`${API_BASE_URL}/revoke-access`, {
         method: 'POST',
@@ -205,7 +262,7 @@ describe('Comprehensive API Tests', () => {
         },
         body: JSON.stringify({
           fileId: uploadedFileId,
-          granteeId: createdUsers.f2User.userId
+          granteeId: createdUsers.f2User.authId
         })
       });
 
@@ -213,6 +270,20 @@ describe('Comprehensive API Tests', () => {
     });
 
     it('should not allow an F2 user to access a file after access has been revoked', async () => {
+      // Revoke access before checking
+      const revokeResponse = await fetch(`${API_BASE_URL}/revoke-access`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${f1Token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fileId: uploadedFileId,
+          granteeId: createdUsers.f2User.authId
+        })
+      });
+      expect(revokeResponse.status).toBe(200);
+
       const response = await fetch(`${API_BASE_URL}/get-file?fileId=${uploadedFileId}`, {
         headers: {
           'Authorization': `Bearer ${f2Token}`
@@ -260,7 +331,7 @@ describe('Comprehensive API Tests', () => {
         },
         body: JSON.stringify({
           fileId: fileData.id,
-          granteeId: createdUsers.f2User.userId
+          granteeId: createdUsers.f2User.authId
         })
       });
 

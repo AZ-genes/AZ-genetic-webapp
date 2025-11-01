@@ -13,18 +13,57 @@ async function handleGetTokenTransactions(req: Request, context: AuthContext): P
       throw new Error('User not authenticated');
     }
 
-    const transactionsRef = firestore.collection('token_transactions')
-      .where('sender_id', '==', user.uid)
-      .orderBy('timestamp', 'desc'); // Order by newest first
+    if (!firestore || typeof firestore.collection !== 'function') {
+      throw new Error('Firestore is not properly initialized. Please check Firebase Admin configuration.');
+    }
 
-    const snapshot = await transactionsRef.get();
+    // Get user profile to use profile.id
+    const profileRef = firestore.collection('user_profiles').doc(user.uid);
+    const profileDoc = await profileRef.get();
 
-    const transactions = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    if (!profileDoc.exists) {
+      // Return empty array if profile doesn't exist yet
+      return new Response(JSON.stringify([]), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      });
+    }
 
-    return new Response(JSON.stringify(transactions), {
+    // Profile ID is the Firestore document ID
+    const profileId = profileDoc.id;
+
+    // Query transactions where user is sender or recipient
+    // Use simpler queries without orderBy to avoid index requirement, then sort in memory
+    const sentTransactionsRef = firestore.collection('token_transactions')
+      .where('sender_id', '==', profileId);
+    
+    const receivedTransactionsRef = firestore.collection('token_transactions')
+      .where('recipient_id', '==', profileId);
+
+    const [sentSnapshot, receivedSnapshot] = await Promise.all([
+      sentTransactionsRef.get(),
+      receivedTransactionsRef.get()
+    ]);
+
+    // Combine and sort transactions in memory (avoids need for composite index)
+    const allTransactions = [
+      ...sentSnapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        ...doc.data(),
+        type: 'spent' as const
+      })),
+      ...receivedSnapshot.docs.map((doc: any) => ({
+        id: doc.id,
+        ...doc.data(),
+        type: 'received' as const
+      }))
+    ].sort((a, b) => {
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return bTime - aTime; // Descending order (newest first)
+    });
+
+    return new Response(JSON.stringify(allTransactions), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200
     });

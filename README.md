@@ -6,7 +6,7 @@ A Next.js application for managing genetic data with Firebase/Firestore backend,
 
 - **Frontend**: Next.js 15, React 19, TypeScript
 - **Backend**: Firebase Admin SDK, Firestore, Firebase Storage
-- **Authentication**: Firebase Auth (Email Link)
+- **Authentication**: Firebase Auth (Email Link + Phone OTP)
 - **Blockchain**: Hedera Hashgraph SDK
 - **Testing**: Vitest
 
@@ -15,7 +15,7 @@ A Next.js application for managing genetic data with Firebase/Firestore backend,
 - Node.js 18.18+ or 20+
 - npm or pnpm
 - Firebase project with:
-  - Authentication enabled (Email Link method)
+  - Authentication enabled (Email Link + Phone OTP)
   - Firestore database
   - Storage bucket
   - Service Account JSON (for Admin SDK)
@@ -66,6 +66,10 @@ pnpm install
 1. **Enable Authentication**:
    - Go to Firebase Console → Authentication → Sign-in method
    - Enable "Email/Password" and configure Email link sign-in
+   - Enable "Phone" authentication for OTP sign-in
+   - **Important for Phone Auth**: Make sure your Firebase project is on a **Blaze (pay-as-you-go) plan**
+   - Add your authorized domains (localhost for development, your domain for production)
+   - reCAPTCHA Enterprise will be automatically enabled for phone authentication
 
 2. **Create Firestore Database**:
    - Go to Firestore Database → Create database

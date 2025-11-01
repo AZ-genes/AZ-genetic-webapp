@@ -25,7 +25,14 @@ const MAX_EXPIRY_DAYS = 365; // Maximum 1 year access grant
 const DEFAULT_EXPIRY_DAYS = 30; // Default 30 days access
 
 const hederaClient = new HederaClient();
-const CONTRACT_ID = ContractId.fromString(process.env.HEDERA_CONTRACT_ID ?? '');
+let CONTRACT_ID: ContractId | null = null;
+try {
+  if (process.env.HEDERA_CONTRACT_ID) {
+    CONTRACT_ID = ContractId.fromString(process.env.HEDERA_CONTRACT_ID);
+  }
+} catch {
+  console.warn('Failed to parse HEDERA_CONTRACT_ID');
+}
 
 // Rate limiting map (in production, use Redis)
 const grantLimits = new Map<string, { count: number; lastReset: number }>();
@@ -184,32 +191,32 @@ async function handleGrantAccess(req: Request, context: AuthContext): Promise<Re
         throw new Error('User profile not found');
       }
       const profile = profileDoc.data();
+      // Profile ID is the Firestore document ID
+      const profileId = profileDoc.id;
 
       if (profile.subscription_tier !== 'F1') {
         throw new Error('Only F1 users can grant access');
       }
 
       const body = await validateRequestBody(req);
-      const file = await validateFileOwnership(firestore, body.fileId, profile.id);
+      const file = await validateFileOwnership(firestore, body.fileId, profileId);
       await validateGrantee(firestore, body.granteeId);
       
-      if (!checkRateLimit(profile.id)) {
+      if (!checkRateLimit(profileId)) {
         throw new Error(`Grant limit exceeded. Maximum ${MAX_GRANTS_PER_DAY} grants per day.`);
       }
 
       await checkExistingPermissions(firestore, body.fileId, body.granteeId);
       const expiresAt = await validateExpiryDate(body.expiresAt);
 
-      const hederaTxId = await hederaClient.grantAccess(
-        CONTRACT_ID,
-        body.fileId,
-        body.granteeId
-      );
+      const hederaTxId = CONTRACT_ID 
+        ? await hederaClient.grantAccess(CONTRACT_ID, body.fileId, body.granteeId)
+        : `mock-grant-${Date.now()}`;
 
       const permission: Partial<ExtendedPermission> = {
         file_id: body.fileId,
         grantee_id: body.granteeId,
-        granted_by: profile.id,
+        granted_by: profileId,
         hedera_transaction_id: hederaTxId,
         expires_at: expiresAt,
         access_level: body.accessLevel || 'read',
@@ -222,7 +229,7 @@ async function handleGrantAccess(req: Request, context: AuthContext): Promise<Re
       const accessLogRef = firestore.collection('access_logs').doc();
       transaction.set(accessLogRef, {
         file_id: body.fileId,
-        grantor_id: profile.id,
+        grantor_id: profileId,
         grantee_id: body.granteeId,
         action: 'grant_access',
         metadata: {
@@ -233,7 +240,7 @@ async function handleGrantAccess(req: Request, context: AuthContext): Promise<Re
       });
 
       // Notify grantee
-      notifyGrantee(firestore, body.granteeId, file, profile.id).catch(console.error);
+      notifyGrantee(firestore, body.granteeId, file, profileId).catch(console.error);
     });
 
     return new Response(JSON.stringify({

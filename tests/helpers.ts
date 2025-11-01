@@ -1,15 +1,18 @@
 import { beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { startMockApiServer, stopMockApiServer } from './mockServer';
+import { startMockApiServer, stopMockApiServer, resetMockApiServer } from './mockServer';
 import { auth } from '../lib/firebase';
 import { createTestClient } from '../src/functions/edge/utils'; // Import createTestClient
 
-// ... (rest of the file)
+beforeAll(async () => {
+  await startMockApiServer();
+});
 
 // Reset mocks between each test
 beforeEach(() => {
   // Reset mock call counters but keep user data
   vi.clearAllMocks();
   createTestClient().reset(); // Reset mock Firestore data for each test
+  resetMockApiServer(); // Reset mock API server data for each test
 });
 
 afterAll(async () => {
@@ -45,10 +48,11 @@ export const testUsers = {
 export async function setupTestUser(userConfig: typeof testUsers.f1User) {
   // In a real Firebase environment, you would use the Firebase Admin SDK to create users.
   // For this mock setup, we'll just return a mock user object.
-  const authId = `test-auth-id-${userConfig.tier}`;
-  const userId = `test-user-id-${userConfig.tier}`;
+  const uniqueId = Date.now().toString() + Math.random().toString(36).substring(2, 6);
+  const authId = `test-auth-id-${userConfig.tier}-${uniqueId}`;
+  const userId = `test-user-id-${userConfig.tier}-${uniqueId}`;
   return {
-    token: `${userConfig.tier.toLowerCase()}-token`,
+    token: `${userConfig.tier.toLowerCase()}-token-${uniqueId}`,
     userId,
     authId
   };

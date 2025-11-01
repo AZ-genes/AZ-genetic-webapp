@@ -16,6 +16,10 @@ async function handleTransferTokens(req: Request, context: AuthContext): Promise
       throw new Error('User not authenticated');
     }
 
+    if (!firestore || typeof firestore.collection !== 'function') {
+      throw new Error('Firestore is not properly initialized. Please check Firebase Admin configuration.');
+    }
+
     const profileRef = firestore.collection('user_profiles').doc(user.uid);
     const profileDoc = await profileRef.get();
 
@@ -23,19 +27,25 @@ async function handleTransferTokens(req: Request, context: AuthContext): Promise
       throw new Error('User profile not found');
     }
     const profile = profileDoc.data();
+    // Profile ID is the Firestore document ID
+    const profileId = profileDoc.id;
 
-    const { recipientAccountId, amount } = await req.json();
+    const body = await req.json();
+    const { recipientAccountId, amount: amountRaw } = body;
 
-    if (!recipientAccountId || typeof amount !== 'number' || amount <= 0) {
+    // Convert amount to number if it's a string
+    const amount = typeof amountRaw === 'string' ? parseFloat(amountRaw) : Number(amountRaw);
+
+    if (!recipientAccountId || !amount || isNaN(amount) || amount <= 0) {
       throw new Error('Invalid recipient account ID or amount');
     }
 
     // Perform token transfer using HederaClient
-    const transactionId = await hederaClient.transferTokens(profile.id, recipientAccountId, amount);
+    const transactionId = await hederaClient.transferTokens(profileId, recipientAccountId, amount);
 
     // Log the transaction
     await firestore.collection('token_transactions').add({
-      sender_id: profile.id,
+      sender_id: profileId,
       recipient_id: recipientAccountId,
       amount: amount,
       transaction_id: transactionId,

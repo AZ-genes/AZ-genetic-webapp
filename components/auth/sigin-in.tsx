@@ -18,14 +18,16 @@ const SignIn: React.FC = () => {
     const router = useRouter();
 
     useEffect(() => {
-        // This useEffect is no longer needed for RecaptchaVerifier initialization
-        // as it's moved to handleOtpRequest.
-        // However, we keep it to ensure recaptchaVerifier is rendered if it was already set.
-        if (recaptchaVerifier && typeof window !== 'undefined') {
-            recaptchaVerifier.render().then((widgetId) => {
-                // console.log('reCAPTCHA rendered', widgetId);
-            });
-        }
+        // Cleanup reCAPTCHA when component unmounts or signInMethod changes
+        return () => {
+            if (recaptchaVerifier && typeof window !== 'undefined') {
+                try {
+                    recaptchaVerifier.clear();
+                } catch (error) {
+                    // Ignore cleanup errors
+                }
+            }
+        };
     }, [recaptchaVerifier]);
 
     const handleMagicLink = async (e: React.FormEvent) => {
@@ -54,28 +56,48 @@ const SignIn: React.FC = () => {
         setError("");
         setMessage("");
         try {
-            // Initialize RecaptchaVerifier here, ensuring the container is in the DOM
-            if (!recaptchaVerifier && typeof window !== 'undefined') {
-                const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-                    'size': 'invisible',
-                    'callback': (response: any) => {
-                        // reCAPTCHA solved, allow signInWithPhoneNumber.
-                        // Not needed for invisible reCAPTCHA
-                    },
-                    'expired-callback': () => {
-                        setError("reCAPTCHA expired. Please try again.");
-                    }
-                });
-                await verifier.render(); // Render the verifier
-                setRecaptchaVerifier(verifier);
+            // Check if recaptcha container exists
+            if (typeof window === 'undefined') {
+                throw new Error('Window is not defined');
+            }
+            
+            const container = document.getElementById('recaptcha-container');
+            if (!container) {
+                throw new Error('reCAPTCHA container not found');
             }
 
-            const confirmation = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier!);
+            // Clean up existing verifier if it exists
+            if (recaptchaVerifier) {
+                try {
+                    recaptchaVerifier.clear();
+                } catch (error) {
+                    // Ignore cleanup errors
+                }
+            }
+
+            // Initialize new RecaptchaVerifier
+            const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                'size': 'invisible',
+                'callback': (response: any) => {
+                    // reCAPTCHA solved automatically for invisible
+                },
+                'expired-callback': () => {
+                    setError("reCAPTCHA expired. Please try again.");
+                    setLoading(false);
+                }
+            });
+
+            // Render the verifier
+            await verifier.render();
+            setRecaptchaVerifier(verifier);
+
+            const confirmation = await signInWithPhoneNumber(auth, phoneNumber, verifier);
             setConfirmationResult(confirmation);
-            setSignInMethod('otp_sent'); // Set sign-in method to 'otp_sent'
+            setSignInMethod('otp_sent');
             setMessage("OTP sent to your phone number!");
         } catch (err: any) {
-            setError(err.message);
+            console.error('OTP request error:', err);
+            setError(err.message || 'Failed to send OTP. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -202,7 +224,8 @@ const SignIn: React.FC = () => {
                         >
                             Back to Email Sign-in
                         </button>
-                        <div id="recaptcha-container"></div>
+                        {/* reCAPTCHA container - invisible */}
+                        <div id="recaptcha-container" style={{ display: 'none' }}></div>
                     </form>
                 )}
 

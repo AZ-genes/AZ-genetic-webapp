@@ -13,9 +13,20 @@ async function handleGetSharedFiles(req: Request, context: AuthContext): Promise
       throw new Error('User not authenticated');
     }
 
-    // Get file permissions where the current user is the owner
+    // Get user profile to use profile.id
+    const profileRef = firestore.collection('user_profiles').doc(user.uid);
+    const profileDoc = await profileRef.get();
+
+    if (!profileDoc.exists) {
+      throw new Error('User profile not found');
+    }
+
+    // Profile ID is the Firestore document ID
+    const profileId = profileDoc.id;
+
+    // Get file permissions where the current user granted access (granted_by)
     const permissionsSnapshot = await firestore.collection('file_permissions')
-      .where('owner_id', '==', user.uid)
+      .where('granted_by', '==', profileId)
       .where('status', '==', 'active')
       .get();
 

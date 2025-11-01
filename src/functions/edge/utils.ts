@@ -33,31 +33,98 @@ export function createTestClient(initialData: Record<string, any> = {}) {
 
   const firestoreMock = {
     collection: (collectionPath: string) => ({
-      doc: (docPath: string) => ({
-        get: async () => {
-          const fullPath = `${collectionPath}/${docPath}`;
-          const data = _mockData[fullPath];
-          return {
-            exists: !!data,
-            data: () => data || {}, // Ensure data() always returns an object
-          };
-        },
-        set: async (data: any) => {
-          const fullPath = `${collectionPath}/${docPath}`;
-          _mockData[fullPath] = data;
-        },
-        delete: async () => {
-          const fullPath = `${collectionPath}/${docPath}`;
-          delete _mockData[fullPath];
-        },
-      }),
+      doc: (docPath: string) => {
+        const fullPath = `${collectionPath}/${docPath}`;
+        return {
+          path: fullPath,
+          get: async () => {
+            const data = _mockData[fullPath];
+            return {
+              exists: !!data,
+              data: () => data || {}, // Ensure data() always returns an object
+            };
+          },
+          set: async (data: any) => {
+            _mockData[fullPath] = data;
+          },
+          delete: async () => {
+            delete _mockData[fullPath];
+          },
+        };
+      },
       add: async (data: any) => {
         const newDocId = `test-doc-id-${Date.now()}`;
         const fullPath = `${collectionPath}/${newDocId}`;
         _mockData[fullPath] = { ...data, id: newDocId };
         return { id: newDocId };
       },
+      where: (field: string, op: string, value: any) => ({
+        where: (...args: any[]) => firestoreMock.collection(collectionPath), // chainable
+        orderBy: (field: string, direction?: string) => firestoreMock.collection(collectionPath),
+        get: async () => ({
+          empty: true,
+          docs: [],
+          forEach: (callback: any) => {}
+        })
+      }),
+      get: async () => ({
+        empty: true,
+        docs: []
+      })
     }),
+    batch: () => {
+      const batchOps: Array<{ type: string; path: string; data?: any }> = [];
+      return {
+        set: (ref: any, data: any) => {
+          batchOps.push({ type: 'set', path: `${ref.path}`, data });
+          return { set: () => {}, update: () => {}, delete: () => {}, commit: async () => {} }; // allow chaining
+        },
+        update: (ref: any, data: any) => {
+          batchOps.push({ type: 'update', path: `${ref.path}`, data });
+          return { set: () => {}, update: () => {}, delete: () => {}, commit: async () => {} }; // allow chaining
+        },
+        delete: (ref: any) => {
+          batchOps.push({ type: 'delete', path: `${ref.path}` });
+          return { set: () => {}, update: () => {}, delete: () => {}, commit: async () => {} }; // allow chaining
+        },
+        commit: async () => {
+          for (const op of batchOps) {
+            if (op.type === 'set') {
+              _mockData[op.path] = op.data;
+            } else if (op.type === 'update') {
+              _mockData[op.path] = { ..._mockData[op.path], ...op.data };
+            } else if (op.type === 'delete') {
+              delete _mockData[op.path];
+            }
+          }
+        }
+      };
+    },
+    runTransaction: async (callback: (transaction: any) => Promise<any>) => {
+      const transaction = {
+        get: async (ref: any) => {
+          const fullPath = `${ref.parent._path || ref.path}`;
+          const data = _mockData[fullPath];
+          return {
+            exists: !!data,
+            data: () => data || {}
+          };
+        },
+        set: (ref: any, data: any) => {
+          const fullPath = `${ref.parent._path || ref.path}`;
+          _mockData[fullPath] = data;
+        },
+        update: (ref: any, data: any) => {
+          const fullPath = `${ref.parent._path || ref.path}`;
+          _mockData[fullPath] = { ..._mockData[fullPath], ...data };
+        },
+        delete: (ref: any) => {
+          const fullPath = `${ref.parent._path || ref.path}`;
+          delete _mockData[fullPath];
+        }
+      };
+      return await callback(transaction);
+    }
   };
 
   const storageMock = {

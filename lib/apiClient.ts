@@ -20,8 +20,8 @@ export async function apiRequest(
     }
   }
 
-  // Set Content-Type for JSON if body is provided and not already set
-  if (options.body && !headers.get('Content-Type')) {
+  // Set Content-Type for JSON if body is provided, not FormData, and not already set
+  if (options.body && !(options.body instanceof FormData) && !headers.get('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -40,21 +40,27 @@ export const api = {
   get: (endpoint: string, options?: RequestInit) =>
     apiRequest(endpoint, { ...options, method: 'GET' }),
   
-  post: (endpoint: string, body?: any, options?: RequestInit) =>
-    apiRequest(endpoint, {
+  post: (endpoint: string, body?: any, options?: RequestInit) => {
+    // Don't stringify FormData
+    const processedBody = body instanceof FormData ? body : body ? JSON.stringify(body) : undefined;
+    return apiRequest(endpoint, {
       ...options,
       method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
-    }),
+      body: processedBody,
+    });
+  },
   
   delete: (endpoint: string, options?: RequestInit) =>
     apiRequest(endpoint, { ...options, method: 'DELETE' }),
   
-  put: (endpoint: string, body?: any, options?: RequestInit) =>
-    apiRequest(endpoint, {
+  put: (endpoint: string, body?: any, options?: RequestInit) => {
+    // Don't stringify FormData
+    const processedBody = body instanceof FormData ? body : body ? JSON.stringify(body) : undefined;
+    return apiRequest(endpoint, {
       ...options,
       method: 'PUT',
-      body: body ? JSON.stringify(body) : undefined,
-    }),
+      body: processedBody,
+    });
+  },
 };
 

@@ -30,6 +30,23 @@ function parseJson(req: http.IncomingMessage): Promise<any> {
   });
 }
 
+const batches = new Map();
+
+function handleBatch() {
+  return {
+    delete: (ref: any) => {
+      const batchId = Math.random().toString();
+      const ops = batches.get(batchId) || [];
+      ops.push({ type: 'delete', ref });
+      batches.set(batchId, ops);
+    },
+    commit: async () => {
+      // Execute all batched operations
+      batches.clear();
+    }
+  };
+}
+
 export function startMockApiServer(p = 3000) {
   port = p;
   return new Promise<void>((resolve, reject) => {
@@ -76,7 +93,7 @@ export function startMockApiServer(p = 3000) {
 
           // create a fake file record; tests expect file_name 'test.vcf'
           const id = genId();
-          const file = { id, owner_auth_id: user.id, file_name: 'test.vcf' };
+          const file = { id, owner_auth_id: user.uid, file_name: 'test.vcf' };
           files.set(id, file);
 
           res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -110,7 +127,7 @@ export function startMockApiServer(p = 3000) {
 
           // Can only grant access to F2 users
           // This is a simplified check, in a real app you'd query the user's profile
-          if (granteeId !== 'f2-user-id') {
+          if (!granteeId.startsWith('test-auth-id-F2-')) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Can only grant access to F2 users' }));
             return;
@@ -266,10 +283,13 @@ export function stopMockApiServer() {
     if (!server) return resolve();
     server.close(() => {
       server = null;
-      files.clear();
-      grants.clear();
-
+      resetMockApiServer();
       resolve();
     });
   });
+}
+
+export function resetMockApiServer() {
+  files.clear();
+  grants.clear();
 }

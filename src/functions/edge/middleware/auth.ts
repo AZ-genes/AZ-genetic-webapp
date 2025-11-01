@@ -1,8 +1,7 @@
-import { adminAuth, adminFirestore } from '../../../lib/firebaseAdmin';
-import { storageAdapter } from '../../../lib/storageAdapter';
+import { adminAuth, adminFirestore } from '@/lib/firebaseAdmin';
+import { storageAdapter } from '@/lib/storageAdapter';
 import { AuthContext, EdgeFunctionConfig, getEdgeConfig, corsHeaders, createTestClient } from '../utils';
 
-// Import mock verification only in test mode to avoid bundling test code
 export async function withAuth(
   req: Request,
   context: AuthContext,
@@ -32,7 +31,12 @@ export async function withAuth(
 
       // Mock user based on token for test environment
       if (token === 'f1-token') {
-        context.user = { uid: 'test-auth-id-F1', email: 'f1user@example.com', tier: 'F1' };
+        context.user = { 
+          uid: 'test-auth-id-F1',  // Match with test database
+          id: 'test-user-id-F1',
+          email: 'f1user@example.com', 
+          tier: 'F1' 
+        };
       } else if (token === 'f2-token') {
         context.user = { uid: 'test-auth-id-F2', email: 'f2user@example.com', tier: 'F2' };
       } else if (token === 'f3-token') {
@@ -89,4 +93,17 @@ export async function withAuth(
         }
       );
     }
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    return new Response(
+      JSON.stringify({ 
+        error: err.message,
+        code: 'REQUEST_ERROR'
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
 }

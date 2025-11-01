@@ -6,7 +6,7 @@ export async function onRequest(req: Request, context: AuthContext): Promise<Res
     return new Response('ok', { headers: corsHeaders });
   }
 
-  if (req.method !== 'GET') {
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return new Response(JSON.stringify({ 
       error: 'Method not allowed',
       code: 'MethodNotAllowed'
@@ -28,19 +28,43 @@ export async function onRequest(req: Request, context: AuthContext): Promise<Res
       const profileDoc = await profileRef.get();
 
       if (!profileDoc.exists) {
-        const newProfile = {
+        // Get name from request body if provided (from sign-up)
+        let profileName = null;
+        try {
+          const body = await req.json().catch(() => ({}));
+          profileName = body.name || null;
+        } catch {
+          // Request body might not be available or already consumed
+        }
+        
+        const newProfile: any = {
           auth_id: user.uid,
-          subscription_tier: 'F1'
+          subscription_tier: 'F1',
+          email: user.email || null,
         };
+        
+        if (profileName) {
+          newProfile.name = profileName;
+        }
+        
         await profileRef.set(newProfile);
 
-        return new Response(JSON.stringify(newProfile), {
+        // Return profile with document ID
+        return new Response(JSON.stringify({
+          ...newProfile,
+          id: profileRef.id
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 201,
         });
       }
 
-      return new Response(JSON.stringify(profileDoc.data()), {
+      // Return profile with document ID
+      const profileData = profileDoc.data();
+      return new Response(JSON.stringify({
+        ...profileData,
+        id: profileDoc.id
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     });

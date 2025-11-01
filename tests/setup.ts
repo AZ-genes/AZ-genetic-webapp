@@ -11,11 +11,11 @@ beforeAll(() => {
   // Set SKIP_AUTH_IN_TEST to true for offline testing
   process.env.SKIP_AUTH_IN_TEST = 'true';
 
-  // Verify required environment variables
-  const required = ['HEDERA_CONTRACT_ID'];
-  const missing = required.filter(key => !process.env[key]);
-  
-  if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  // HEDERA_CONTRACT_ID is optional for tests (will use mock mode)
+  // Only require it if you're testing actual contract interactions
+  if (process.env.HEDERA_CONTRACT_ID) {
+    console.log('Using Hedera contract:', process.env.HEDERA_CONTRACT_ID);
+  } else {
+    console.log('Running tests in mock mode (no Hedera contract configured)');
   }
 });

@@ -13,10 +13,22 @@ export async function handleGetFiles(req: Request, context: AuthContext): Promis
       throw new Error('User not authenticated');
     }
 
-    const filesRef = firestore.collection('files').where('owner_id', '==', user.uid);
+    // Get user profile to use profile.id instead of user.uid
+    const profileRef = firestore.collection('user_profiles').doc(user.uid);
+    const profileDoc = await profileRef.get();
+
+    if (!profileDoc.exists) {
+      throw new Error('User profile not found');
+    }
+
+    const profile = profileDoc.data();
+    // Profile ID is the Firestore document ID
+    const profileId = profileDoc.id;
+
+    const filesRef = firestore.collection('files').where('owner_id', '==', profileId);
     const snapshot = await filesRef.get();
 
-    const files = snapshot.docs.map(doc => ({
+    const files = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     }));

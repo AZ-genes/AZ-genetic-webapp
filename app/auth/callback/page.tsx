@@ -17,7 +17,27 @@ export default function AuthCallback() {
                     }
                     if (email) {
                         await signInWithEmailLink(auth, email, window.location.href);
+                        const userName = window.localStorage.getItem('userNameForSignIn');
                         window.localStorage.removeItem('emailForSignIn');
+                        window.localStorage.removeItem('userNameForSignIn');
+                        
+                        // Create profile with name if this is first sign-in
+                        if (userName) {
+                            try {
+                                const token = await auth.currentUser?.getIdToken();
+                                await fetch('/api/get-profile', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${token}`
+                                    },
+                                    body: JSON.stringify({ name: userName })
+                                });
+                            } catch (err) {
+                                console.error('Failed to create profile:', err);
+                            }
+                        }
+                        
                         router.push('/dashboard');
                         return;
                     }
