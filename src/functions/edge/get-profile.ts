@@ -1,68 +1,78 @@
-// This file targets a Deno edge runtime. Disable type-checking locally to avoid
-// editor/tsserver errors about Deno/remote imports in the development environment.
-// We keep runtime imports as-is for the edge deployment.
-// @ts-nocheck
-declare const Deno: any;
+import { AuthContext, corsHeaders } from './utils';
+import { withAuth } from './middleware/auth';
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { UserProfile } from '../types'
-import { withAuth } from './middleware/auth'
+export async function onRequest(req: Request, context: AuthContext): Promise<Response> {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-const supabase = createClient(supabaseUrl, supabaseKey)
-
-serve(async (req: Request) => withAuth(req, { supabase }, async (req, context) => {
-  try {
-    const { user } = context;
-
-    // Get or create profile
-    const { data: profile, error: profileError } = await supabase
-      .from('user_profiles')
-      .select()
-      .eq('auth_id', user.id)
-      .single()
-
-    if (profileError && profileError.code !== 'PGRST116') {
-      throw profileError
-    }
-
-    if (!profile) {
-      const newProfile: Partial<UserProfile> = {
-        auth_id: user.id,
-        subscription_tier: 'F1'
-      }
-
-      const { data: createdProfile, error: createError } = await supabase
-        .from('user_profiles')
-        .insert(newProfile)
-        .select()
-        .single()
-
-      if (createError) {
-        throw createError
-      }
-
-      return new Response(JSON.stringify(createdProfile), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 201,
-      })
-    }
-
-    return new Response(JSON.stringify(profile), {
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return new Response(JSON.stringify({ 
+      error: 'Method not allowed',
+      code: 'MethodNotAllowed'
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+      status: 405
+    });
+  }
+
+  try {
+    return await withAuth(req, context, async (req, context) => {
+      const { user, firestore } = context;
+
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const profileRef = firestore.collection('user_profiles').doc(user.uid);
+      const profileDoc = await profileRef.get();
+
+      if (!profileDoc.exists) {
+        // Get name from request body if provided (from sign-up)
+        let profileName = null;
+        try {
+          const body = await req.json().catch(() => ({}));
+          profileName = body.name || null;
+        } catch {
+          // Request body might not be available or already consumed
+        }
+        
+        const newProfile: any = {
+          auth_id: user.uid,
+          subscription_tier: 'F1',
+          email: user.email || null,
+        };
+        
+        if (profileName) {
+          newProfile.name = profileName;
+        }
+        
+        await profileRef.set(newProfile);
+
+        // Return profile with document ID
+        return new Response(JSON.stringify({
+          ...newProfile,
+          id: profileRef.id
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 201,
+        });
+      }
+
+      // Return profile with document ID
+      const profileData = profileDoc.data();
+      return new Response(JSON.stringify({
+        ...profileData,
+        id: profileDoc.id
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    });
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error(String(err));
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
-    })
+    });
   }
-}));
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
