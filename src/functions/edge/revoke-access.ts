@@ -11,33 +11,28 @@ interface RevokeAccessRequest {
 }
 
 const hederaClient = new HederaClient();
-let CONTRACT_ID: ContractId | null = null;
-try {
-  if (process.env.HEDERA_CONTRACT_ID) {
-    CONTRACT_ID = ContractId.fromString(process.env.HEDERA_CONTRACT_ID);
-  }
-} catch {
-  console.warn('Failed to parse HEDERA_CONTRACT_ID');
-}
+const CONTRACT_ID = ContractId.fromString(process.env.HEDERA_CONTRACT_ID ?? '');
 
 async function notifyRevocation(
-  firestore: AuthContext['firestore'],
+  supabase: AuthContext['supabase'],
   granteeId: string,
   fileMetadata: any,
   granterId: string,
   reason?: string
 ) {
   try {
-    const granteeRef = firestore.collection('user_profiles').doc(granteeId);
-    const granteeDoc = await granteeRef.get();
-    const grantee = granteeDoc.data();
+    const { data: grantee } = await supabase
+      .from('user_profiles')
+      .select('email, notification_preferences')
+      .eq('id', granteeId)
+      .single();
 
     if (grantee?.email) {
       // In production, implement proper email notification system
       console.log(`Would send email to ${grantee.email} about access revocation`);
     }
 
-    await firestore.collection('notifications').add({
+    await supabase.from('notifications').insert({
       user_id: granteeId,
       type: 'access_revoked',
       message: `Your access to file: ${fileMetadata.file_name} has been revoked`,
@@ -53,36 +48,42 @@ async function notifyRevocation(
 }
 
 async function validateFileOwnership(
-  firestore: AuthContext['firestore'],
+  supabase: AuthContext['supabase'],
   fileId: string,
   ownerId: string
 ) {
-  const fileRef = firestore.collection('files').doc(fileId);
-  const fileDoc = await fileRef.get();
+  const { data: file, error: fileError } = await supabase
+    .from('files')
+    .select('*')
+    .eq('id', fileId)
+    .eq('owner_id', ownerId)
+    .single();
 
-  if (!fileDoc.exists || fileDoc.data().owner_id !== ownerId) {
+  if (fileError || !file) {
     throw new Error('File not found or access denied');
   }
 
-  return fileDoc.data();
+  return file;
 }
 
 async function validateActivePermission(
-  firestore: AuthContext['firestore'],
+  supabase: AuthContext['supabase'],
   fileId: string,
   granteeId: string
 ): Promise<FilePermission> {
-  const permissionsQuery = firestore.collection('file_permissions')
-    .where('file_id', '==', fileId)
-    .where('grantee_id', '==', granteeId)
-    .where('status', '==', 'active');
-  const snapshot = await permissionsQuery.get();
+  const { data: permission, error: permissionError } = await supabase
+    .from('file_permissions')
+    .select('*')
+    .eq('file_id', fileId)
+    .eq('grantee_id', granteeId)
+    .eq('status', 'active')
+    .single();
 
-  if (snapshot.empty) {
+  if (permissionError || !permission) {
     throw new Error('No active permission found for this user');
   }
 
-  return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as FilePermission;
+  return permission;
 }
 
 async function validateRequestBody(req: Request): Promise<RevokeAccessRequest> {
@@ -98,78 +99,93 @@ async function handleRevokeAccess(req: Request, context: AuthContext): Promise<R
     throw new Error('User not authenticated');
   }
 
-  const { user, firestore } = context;
+  // Start a transaction
+  const { error: txError } = await context.supabase.rpc('begin_transaction');
+  if (txError) throw txError;
 
   try {
-    await firestore.runTransaction(async (transaction: any) => {
-      const profileRef = firestore.collection('user_profiles').doc(user.uid);
-      const profileDoc = await transaction.get(profileRef);
+    // Get user profile
+    const { data: profile, error: profileError } = await context.supabase
+      .from('user_profiles')
+      .select()
+      .eq('auth_id', context.user.id)
+      .single();
 
-      if (!profileDoc.exists) {
-        throw new Error('User profile not found');
-      }
-      const profile = profileDoc.data();
-      // Profile ID is the Firestore document ID
-      const profileId = profileDoc.id;
+    if (profileError || !profile) {
+      throw new Error('User profile not found');
+    }
 
-      if (profile.subscription_tier !== 'F1') {
-        throw new Error('Only F1 users can revoke access');
-      }
+    if (profile.subscription_tier !== 'F1') {
+      throw new Error('Only F1 users can revoke access');
+    }
 
-      const body = await validateRequestBody(req);
-      const file = await validateFileOwnership(firestore, body.fileId, profileId);
-      const permission = await validateActivePermission(firestore, body.fileId, body.granteeId);
+    const body = await validateRequestBody(req);
+    const file = await validateFileOwnership(context.supabase, body.fileId, profile.id);
+    const permission = await validateActivePermission(context.supabase, body.fileId, body.granteeId);
 
-      // Record revocation on Hedera
-      const hederaTxId = CONTRACT_ID 
-        ? await hederaClient.revokeAccess(CONTRACT_ID, body.fileId, body.granteeId)
-        : `mock-revoke-${Date.now()}`;
+    // Record revocation on Hedera
+    const hederaTxId = await hederaClient.revokeAccess(
+      CONTRACT_ID,
+      body.fileId,
+      body.granteeId
+    );
 
-      // Update permission status
-      const permissionRef = firestore.collection('file_permissions').doc(permission.id);
-      transaction.update(permissionRef, {
+    // Update permission status
+    const { error: updateError } = await context.supabase
+      .from('file_permissions')
+      .update({
         status: 'revoked',
         revoked_at: new Date().toISOString(),
-        revoked_by: profileId,
+        revoked_by: profile.id,
         revocation_reason: body.reason || null,
         revocation_transaction_id: hederaTxId
-      });
+      })
+      .eq('id', permission.id);
 
-      // Log the revocation
-      const accessLogRef = firestore.collection('access_logs').doc();
-      transaction.set(accessLogRef, {
-        file_id: body.fileId,
-        grantor_id: profileId,
-        grantee_id: body.granteeId,
-        action: 'revoke_access',
-        metadata: {
-          reason: body.reason,
-          permission_id: permission.id,
-          hedera_transaction_id: hederaTxId
-        }
-      });
+    if (updateError) {
+      throw updateError;
+    }
 
-      // Notify user of revocation (non-blocking)
-      notifyRevocation(
-        firestore,
-        body.granteeId,
-        file,
-        profileId,
-        body.reason
-      ).catch(console.error);
+    // Log the revocation
+    await context.supabase.from('access_logs').insert({
+      file_id: body.fileId,
+      grantor_id: profile.id,
+      grantee_id: body.granteeId,
+      action: 'revoke_access',
+      metadata: {
+        reason: body.reason,
+        permission_id: permission.id,
+        hedera_transaction_id: hederaTxId
+      }
     });
 
+    // Commit transaction
+    await context.supabase.rpc('commit_transaction');
+
+    // Notify user of revocation (non-blocking)
+    notifyRevocation(
+      context.supabase,
+      body.granteeId,
+      file,
+      profile.id,
+      body.reason
+    ).catch(console.error);
+
     return new Response(JSON.stringify({
-      message: 'Access revoked successfully'
+      message: 'Access revoked successfully',
+      transactionId: hederaTxId
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200
     });
 
   } catch (error) {
+    // Rollback transaction
+    await context.supabase.rpc('rollback_transaction');
+
     // Log the error
     try {
-      await firestore.collection('error_logs').add({
+      await context.supabase.from('error_logs').insert({
         error_type: 'revoke_access_failed',
         error_message: error instanceof Error ? error.message : 'Unknown error',
         metadata: {

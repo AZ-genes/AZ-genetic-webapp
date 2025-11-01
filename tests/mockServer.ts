@@ -1,6 +1,6 @@
 import http from 'http';
 
-import { verifyMockToken } from './mocks/firebase';
+import { verifyMockToken, clearMockData, findUserIdByTier, findAuthIdByProfileId } from './mocks/supabase';
 
 let server: http.Server | null = null;
 let port = 3000;
@@ -30,23 +30,6 @@ function parseJson(req: http.IncomingMessage): Promise<any> {
   });
 }
 
-const batches = new Map();
-
-function handleBatch() {
-  return {
-    delete: (ref: any) => {
-      const batchId = Math.random().toString();
-      const ops = batches.get(batchId) || [];
-      ops.push({ type: 'delete', ref });
-      batches.set(batchId, ops);
-    },
-    commit: async () => {
-      // Execute all batched operations
-      batches.clear();
-    }
-  };
-}
-
 export function startMockApiServer(p = 3000) {
   port = p;
   return new Promise<void>((resolve, reject) => {
@@ -62,19 +45,6 @@ export function startMockApiServer(p = 3000) {
         const authHeader = req.headers['authorization'] || '';
         const token = typeof authHeader === 'string' && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
         const user = token ? verifyMockToken(token) : null;
-
-        // GET /api/get-profile
-        if (req.method === 'GET' && pathname === '/api/get-profile') {
-          if (!user) {
-            res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Unauthorized' }));
-            return;
-          }
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ auth_id: user.uid, subscription_tier: user.user_metadata.subscription_tier }));
-          return;
-        }
 
         // POST /api/upload-file
         if (req.method === 'POST' && pathname === '/api/upload-file') {
@@ -93,7 +63,7 @@ export function startMockApiServer(p = 3000) {
 
           // create a fake file record; tests expect file_name 'test.vcf'
           const id = genId();
-          const file = { id, owner_auth_id: user.uid, file_name: 'test.vcf' };
+          const file = { id, owner_auth_id: user.id, file_name: 'test.vcf' };
           files.set(id, file);
 
           res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -113,69 +83,32 @@ export function startMockApiServer(p = 3000) {
           const { fileId, granteeId } = body || {};
           const file = files.get(fileId);
           if (!file) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'File not found' }));
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Not found' }));
             return;
           }
 
           // Only owner can grant
-          if (file.owner_auth_id !== user.uid) {
+          if (file.owner_auth_id !== user.id) {
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Forbidden' }));
-            return;
-          }
-
-          // Can only grant access to F2 users
-          // This is a simplified check, in a real app you'd query the user's profile
-          if (!granteeId.startsWith('test-auth-id-F2-')) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Can only grant access to F2 users' }));
             return;
           }
 
           const set = grants.get(fileId) ?? new Set<string>();
-          set.add(granteeId);
+          // support placeholder grantee IDs used in tests (e.g. 'F2_USER_ID')
+          if (granteeId === 'F2_USER_ID') {
+            const found = findUserIdByTier('F2');
+            if (found) set.add(found);
+          } else {
+            // granteeId may be a profile id (user_profiles.id) - map to auth id if so
+            const possibleAuth = findAuthIdByProfileId(granteeId);
+            if (possibleAuth) set.add(possibleAuth);
+            else set.add(granteeId);
+          }
           grants.set(fileId, set);
 
           res.writeHead(201, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true }));
-          return;
-        }
-
-        // POST /api/revoke-access
-        if (req.method === 'POST' && pathname === '/api/revoke-access') {
-          if (!user) {
-            res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Unauthorized' }));
-            return;
-          }
-
-          const body = await parseJson(req);
-          const { fileId, granteeId } = body || {};
-          const file = files.get(fileId);
-          if (!file) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'File not found' }));
-            return;
-          }
-
-          // Only owner can revoke
-          if (file.owner_auth_id !== user.uid) {
-            res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Forbidden' }));
-            return;
-          }
-
-          const set = grants.get(fileId);
-          if (!set || !set.has(granteeId)) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Access not found' }));
-            return;
-          }
-
-          set.delete(granteeId);
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
           return;
         }
@@ -283,13 +216,10 @@ export function stopMockApiServer() {
     if (!server) return resolve();
     server.close(() => {
       server = null;
-      resetMockApiServer();
+      files.clear();
+      grants.clear();
+      clearMockData();
       resolve();
     });
   });
-}
-
-export function resetMockApiServer() {
-  files.clear();
-  grants.clear();
 }

@@ -1,6 +1,10 @@
-import { adminAuth, adminFirestore } from '@/lib/firebaseAdmin';
-import { storageAdapter } from '@/lib/storageAdapter';
+import { createClient } from '@supabase/supabase-js';
 import { AuthContext, EdgeFunctionConfig, getEdgeConfig, corsHeaders, createTestClient } from '../utils';
+
+// Import mock verification only in test mode to avoid bundling test code
+const verifyMockToken = process.env.NODE_ENV === 'test'
+  ? require('../../../tests/mocks/supabase').verifyMockToken
+  : null;
 
 export async function withAuth(
   req: Request,
@@ -16,33 +20,8 @@ export async function withAuth(
     
     // In test mode, we can bypass auth entirely
     if (config.skipAuth) {
-      if (!context.firestore || !context.storage) {
-        const testClient = createTestClient();
-        context.firestore = testClient.firestore;
-        context.storage = testClient.storage;
-        context.auth = testClient.auth; // Add this line
-      }
-      // In skipAuth mode, we still need to mock the user based on the token
-      const authHeader = req.headers.get('Authorization');
-      if (!authHeader) {
-        throw new Error('No authorization header in skipAuth mode');
-      }
-      const token = authHeader.replace('Bearer ', '');
-
-      // Mock user based on token for test environment
-      if (token === 'f1-token') {
-        context.user = { 
-          uid: 'test-auth-id-F1',  // Match with test database
-          id: 'test-user-id-F1',
-          email: 'f1user@example.com', 
-          tier: 'F1' 
-        };
-      } else if (token === 'f2-token') {
-        context.user = { uid: 'test-auth-id-F2', email: 'f2user@example.com', tier: 'F2' };
-      } else if (token === 'f3-token') {
-        context.user = { uid: 'test-auth-id-F3', email: 'f3user@example.com', tier: 'F3' };
-      } else {
-        throw new Error('Invalid mock token in skipAuth mode');
+      if (!context.supabase) {
+        context.supabase = createTestClient();
       }
       return await handler(req, context);
     }
@@ -57,22 +36,34 @@ export async function withAuth(
     try {
       // In test mode, use mock verification with enhanced error handling
       if (process.env.NODE_ENV === 'test') {
-        if (token === 'valid-token') {
-          context.user = { uid: 'test-user-id', email: 'test@example.com' };
-        } else {
+        const mockUser = verifyMockToken(token);
+        if (!mockUser) {
           throw new Error('Test token validation failed: Invalid or expired token');
         }
+        if (!mockUser.id) {
+          throw new Error('Test token validation failed: Missing user ID');
+        }
+        context.user = {
+          id: mockUser.id,
+          email: mockUser.email,
+          user_metadata: mockUser.user_metadata || {},
+          app_metadata: mockUser.app_metadata || {},
+          created_at: mockUser.created_at || new Date().toISOString()
+        };
       } else {
-        // Firebase Admin auth verification
-        const decodedToken = await adminAuth.verifyIdToken(token);
-        context.user = { ...decodedToken, id: decodedToken.uid };
-        // Attach Admin Firestore and Storage adapter if not present
-        context.firestore = context.firestore || adminFirestore;
-        context.storage = context.storage || storageAdapter;
+        // Normal Supabase auth with better error handling
+        const { data: { user }, error: userError } = await context.supabase.auth.getUser(token);
+        if (userError) {
+          throw new Error(`Token validation failed: ${userError.message}`);
+        }
+        if (!user) {
+          throw new Error('Token validation failed: No user found');
+        }
+        context.user = user;
       }
 
       // Call the handler with auth context
-      return await handler(req, { ...context, user: context.user });
+      return await handler(req, context);
 
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -93,17 +84,4 @@ export async function withAuth(
         }
       );
     }
-  } catch (error: unknown) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    return new Response(
-      JSON.stringify({ 
-        error: err.message,
-        code: 'REQUEST_ERROR'
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
-  }
 }

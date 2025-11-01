@@ -1,11 +1,9 @@
 "use client";
 import React, { useState } from "react";
-import { auth } from "@/lib/firebase";
-import { sendSignInLinkToEmail } from "firebase/auth";
+import { supabase } from "@/lib/supabase";
 
 const SignUp: React.FC = () => {
     const [email, setEmail] = useState("");
-    const [name, setName] = useState("");
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
@@ -17,17 +15,18 @@ const SignUp: React.FC = () => {
         setMessage("");
 
         try {
-            const actionCodeSettings = {
-                url: `${window.location.origin}/auth/callback`,
-                handleCodeInApp: true,
-            };
-            await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-            // Store name along with email for later profile creation
-            window.localStorage.setItem('emailForSignIn', email);
-            if (name.trim()) {
-                window.localStorage.setItem('userNameForSignIn', name.trim());
+            const { error } = await supabase.auth.signInWithOtp({
+                email,
+                options: {
+                    emailRedirectTo: `${window.location.origin}/auth/callback`,
+                },
+            });
+
+            if (error) {
+                setError(error.message);
+            } else {
+                setMessage("Check your email for the magic link!");
             }
-            setMessage("Check your email for the magic link!");
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -40,18 +39,6 @@ const SignUp: React.FC = () => {
             <div className="bg-white shadow-lg rounded-lg px-8 py-10 w-full max-w-md">
                 <h2 className="text-3xl font-bold text-center text-indigo-700 mb-6">Sign Up</h2>
                 <form onSubmit={handleSignUp} className="space-y-5">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                        <input
-                            type="text"
-                            className="w-full px-4 py-2 border text-gray-600 outline-none rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                            required
-                            autoComplete="name"
-                            placeholder="Enter your full name"
-                        />
-                    </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                         <input

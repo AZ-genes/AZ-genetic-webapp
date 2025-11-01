@@ -163,7 +163,7 @@ async function checkExistingPermissions(
   }
 }
 
-async function validateAndGetProfile(context: AuthContext) {
+async function validateAndGetProfile(req: Request, context: AuthContext) {
   if (!context.user) {
     throw new Error('User not authenticated');
   }

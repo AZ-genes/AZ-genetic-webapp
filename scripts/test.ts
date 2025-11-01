@@ -1,14 +1,10 @@
 import { execSync } from 'child_process';
 import * as dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import * as path from 'path';
+import * as fs from 'fs';
 
 // Load test environment
-dotenv.config({ path: resolve(__dirname, '../.env.test') });
+dotenv.config({ path: path.resolve(__dirname, '../.env.test') });
 
 // Verify environment variables
 const requiredEnvVars = [
@@ -24,14 +20,14 @@ if (missingVars.length > 0) {
 }
 
 // Create test fixture directory if it doesn't exist
-const fixturesDir = resolve(__dirname, '../tests/fixtures');
-if (!existsSync(fixturesDir)) {
-  mkdirSync(fixturesDir, { recursive: true });
+const fixturesDir = path.resolve(__dirname, '../tests/fixtures');
+if (!fs.existsSync(fixturesDir)) {
+  fs.mkdirSync(fixturesDir, { recursive: true });
 }
 
 // Ensure test VCF file exists
-const testVcfPath = resolve(fixturesDir, 'test.vcf');
-if (!existsSync(testVcfPath)) {
+const testVcfPath = path.resolve(fixturesDir, 'test.vcf');
+if (!fs.existsSync(testVcfPath)) {
   const vcfContent = `##fileformat=VCF
 ##filedate=20251030
 ##source=TestData
@@ -40,7 +36,7 @@ if (!existsSync(testVcfPath)) {
 #CHROM  POS     ID      REF     ALT     QUAL    FILTER  INFO
 chr1    1000    test1   A       T       60      PASS    TEST=test_data
 chr1    2000    test2   G       C       60      PASS    TEST=test_data`;
-  writeFileSync(testVcfPath, vcfContent);
+  fs.writeFileSync(testVcfPath, vcfContent);
 }
 
 // Run tests

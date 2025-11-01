@@ -22,7 +22,7 @@ export class EncryptionService {
     cipher.start({ iv });
     
     // Process file data in chunks
-    cipher.update(forge.util.createBuffer(new Uint8Array(fileData)));
+    cipher.update(forge.util.createBuffer(fileData));
     cipher.finish();
 
     const encrypted = Buffer.from(cipher.output.getBytes(), 'binary');
@@ -45,7 +45,7 @@ export class EncryptionService {
     const decipher = forge.cipher.createDecipher('AES-CBC', forge.util.hexToBytes(key));
     decipher.start({ iv: forge.util.hexToBytes(iv) });
     
-    decipher.update(forge.util.createBuffer(new Uint8Array(encryptedData)));
+    decipher.update(forge.util.createBuffer(encryptedData));
     decipher.finish();
 
     return Buffer.from(decipher.output.getBytes(), 'binary');

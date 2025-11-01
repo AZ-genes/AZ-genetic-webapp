@@ -1,13 +1,11 @@
 import { EncryptionService } from '../../services/encryption';
 import { HederaClient } from '../../services/hedera/client';
-import { GeneticETLService } from '../../services/genetic/etl';
 import { FileMetadata } from './types';
 import { AuthContext, corsHeaders } from './utils';
 import { withAuth } from './middleware/auth';
 
 const encryptionService = new EncryptionService();
 const hederaClient = new HederaClient();
-const etlService = new GeneticETLService();
 const TOPIC_ID = process.env.HEDERA_TOPIC_ID ?? '';
 
 // Constants
@@ -19,7 +17,7 @@ const ALLOWED_FILE_TYPES = new Set([
   'chemical/x-vcf'  // VCF files
 ]);
 
-// Rate limiting map (in production, use Redis)
+// Rate limiting map (in production, use Redis or similar)
 const uploadLimits = new Map<string, { count: number; lastReset: number }>();
 const RATE_LIMIT = 10; // uploads per hour
 const RATE_WINDOW = 3600000; // 1 hour in milliseconds
@@ -58,26 +56,25 @@ async function handleFileUpload(req: Request, context: AuthContext): Promise<Res
   }
 
   let uploadedFilePath: string | null = null;
-  const { user, firestore, storage } = context;
 
   try {
-
-    if (!user) {
+    if (!context.user) {
       throw new Error('User not authenticated');
     }
 
-    const profileRef = firestore.collection('user_profiles').doc(user.uid);
-    const profileDoc = await profileRef.get();
+    // Get user profile
+    const { data: profile, error: profileError } = await context.supabase
+      .from('user_profiles')
+      .select()
+      .eq('auth_id', context.user.id)
+      .single();
 
-    if (!profileDoc.exists) {
+    if (profileError || !profile) {
       throw new Error('User profile not found');
     }
-    const profile = profileDoc.data();
-    // Profile ID is the Firestore document ID
-    const profileId = profileDoc.id;
 
     // Check rate limit
-    if (!checkRateLimit(profileId)) {
+    if (!checkRateLimit(profile.id)) {
       throw new Error('Rate limit exceeded. Please try again later.');
     }
 
@@ -107,43 +104,31 @@ async function handleFileUpload(req: Request, context: AuthContext): Promise<Res
       throw new Error('Invalid genetic file format');
     }
 
-    // Process genetic data if VCF file
-    let processedData = null;
-    if (file.type === 'chemical/x-vcf') {
-      try {
-        const vcfContent = fileBuffer.toString('utf-8');
-        processedData = await etlService.processVCFFile(vcfContent);
-        const normalized = await etlService.normalizeData(processedData);
-        processedData = normalized;
-      } catch (error) {
-        console.error('Failed to process VCF file:', error);
-        // Continue with upload even if processing fails
-      }
-    }
-
     // Encrypt file
     const { encryptedData, key, iv, hash } = await encryptionService.encryptFile(fileBuffer);
 
-    // Upload encrypted file to Firebase Storage
+    // Upload encrypted file to Supabase Storage
     const timestamp = new Date().toISOString();
-    const storagePath = `${profileId}/${timestamp}-${file.name}`;
+    const storagePath = `${profile.id}/${timestamp}-${file.name}`;
     uploadedFilePath = storagePath;
     
-    const storageRef = storage.ref(storagePath);
-    await storage.uploadBytes(storageRef, encryptedData);
+    const { error: uploadError } = await context.supabase.storage
+      .from('encrypted-files')
+      .upload(storagePath, encryptedData, {
+        contentType: 'application/octet-stream', // Always store as binary
+        cacheControl: 'private, no-cache'
+      });
 
-    // Use processed data hash for Hedera if available, otherwise use encrypted file hash
-    let hederaHash = hash;
-    if (processedData) {
-      hederaHash = etlService.generateDataHash(processedData);
+    if (uploadError) {
+      throw uploadError;
     }
 
-    // Submit hash to Hedera (will return mock hash if topic ID is missing or client unavailable)
-    const hederaTxId = TOPIC_ID ? await hederaClient.submitHash(TOPIC_ID, hederaHash) : `mock-hash-${Date.now()}`;
+    // Submit hash to Hedera
+    const hederaTxId = await hederaClient.submitHash(TOPIC_ID, hash);
 
     // Save file metadata
     const fileMetadata: Partial<FileMetadata> = {
-      owner_id: profileId,
+      owner_id: profile.id,
       file_name: file.name,
       file_type: file.type,
       storage_path: storagePath,
@@ -153,34 +138,15 @@ async function handleFileUpload(req: Request, context: AuthContext): Promise<Res
       hedera_transaction_id: hederaTxId
     };
 
-    const savedFileRef = await firestore.collection('files').add(fileMetadata);
-    const savedFile = { id: savedFileRef.id, ...fileMetadata };
+    const { data: savedFile, error: saveError } = await context.supabase
+      .from('files')
+      .insert(fileMetadata)
+      .select()
+      .single();
 
-    // Save processed genetic data if available
-    if (processedData) {
-      await firestore.collection('genetic_data').add({
-        file_id: savedFile.id,
-        processed_data: processedData,
-        hedera_hash: hederaHash,
-        hedera_transaction_id: hederaTxId,
-        created_at: new Date().toISOString()
-      });
+    if (saveError) {
+      throw saveError;
     }
-
-    // Log the file upload
-    await firestore.collection('file_access_logs').add({
-      file_id: savedFile.id,
-      user_id: profileId,
-      access_type: 'upload',
-      status: 'success',
-      metadata: {
-        file_name: savedFile.file_name,
-        file_type: savedFile.file_type,
-        storage_path: savedFile.storage_path,
-        hedera_transaction_id: savedFile.hedera_transaction_id,
-        processed: !!processedData
-      }
-    });
 
     return new Response(JSON.stringify(savedFile), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -191,8 +157,9 @@ async function handleFileUpload(req: Request, context: AuthContext): Promise<Res
     // Cleanup uploaded file if exists
     if (uploadedFilePath) {
       try {
-        const storageRef = storage.ref(uploadedFilePath);
-        await storage.deleteObject(storageRef);
+        await context.supabase.storage
+          .from('encrypted-files')
+          .remove([uploadedFilePath]);
       } catch (cleanupError) {
         console.error('Failed to cleanup uploaded file:', cleanupError);
       }
@@ -213,34 +180,5 @@ async function handleFileUpload(req: Request, context: AuthContext): Promise<Res
 }
 
 // Export the handler with auth middleware
-export async function onRequest(req: Request, context: AuthContext): Promise<Response> {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ 
-      error: 'Method not allowed',
-      code: 'MethodNotAllowed'
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 405
-    });
-  }
-
-  try {
-    return await withAuth(req, context, handleFileUpload);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const statusCode = error instanceof Error && 
-      (message.includes('Rate limit') || message.includes('Invalid file type')) ? 400 : 500;
-
-    return new Response(JSON.stringify({ 
-      error: message,
-      code: error instanceof Error ? error.name : 'UnknownError'
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: statusCode
-    });
-  }
-}
+export const onRequest = (req: Request, context: AuthContext) =>
+  withAuth(req, context, handleFileUpload);

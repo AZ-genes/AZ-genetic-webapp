@@ -1,5 +1,4 @@
-import { AuthContext, corsHeaders } from './utils';
-import { withAuth } from './middleware/auth';
+import { createClient } from '@supabase/supabase-js';
 
 interface AnalyticsEvent {
   id: string;
@@ -35,6 +34,10 @@ interface AnalyticsFilters {
   ageRange?: string;
   markers?: string[];
 }
+
+const supabaseUrl = process.env.SUPABASE_URL ?? '';
+const supabaseKey = process.env.SUPABASE_ANON_KEY ?? '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Privacy thresholds
 const MIN_AGGREGATE_SIZE = 5; // Minimum number of records needed for aggregation
@@ -93,49 +96,69 @@ function aggregateAnalytics(events: AnalyticsEvent[]): AggregatedStats {
   return stats;
 }
 
-function buildAnalyticsQuery(firestore: AuthContext['firestore'], filters: AnalyticsFilters) {
-  let query: any = firestore.collection('analytics_events');
+function buildAnalyticsQuery(filters: AnalyticsFilters) {
+  let query = supabase.from('analytics_events').select();
 
   if (filters.eventType) {
-    query = query.where('event_type', '==', filters.eventType);
+    query = query.eq('event_type', filters.eventType);
   }
   if (filters.fileType) {
-    query = query.where('file_type', '==', filters.fileType);
+    query = query.eq('file_type', filters.fileType);
   }
   if (filters.startDate) {
-    query = query.where('created_at', '>=', filters.startDate);
+    query = query.gte('created_at', filters.startDate);
   }
   if (filters.endDate) {
-    query = query.where('created_at', '<=', filters.endDate);
+    query = query.lte('created_at', filters.endDate);
   }
   if (filters.region) {
-    query = query.where('region', '==', filters.region);
+    query = query.eq('region', filters.region);
   }
   if (filters.ageRange) {
-    query = query.where('age_range', '==', filters.ageRange);
+    query = query.eq('age_range', filters.ageRange);
   }
   if (filters.markers && filters.markers.length > 0) {
-    query = query.where('genetic_markers', 'array-contains-any', filters.markers);
+    query = query.contains('genetic_markers', filters.markers);
   }
 
   return query;
 }
 
-async function handleGetAnalytics(req: Request, context: AuthContext): Promise<Response> {
-  if (!context.user) {
-    throw new Error('User not authenticated');
+export const handler = async (req: Request): Promise<Response> => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { user, firestore } = context;
+    if (req.method !== 'GET') {
+      throw new Error('Method not allowed');
+    }
 
-    const profileRef = firestore.collection('user_profiles').doc(user.uid);
-    const profileDoc = await profileRef.get();
+    // Get auth user
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('No authorization header');
+    }
 
-    if (!profileDoc.exists) {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+
+    if (userError || !user) {
+      throw new Error('Invalid token');
+    }
+
+    // Get user profile and verify F3 tier
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select()
+      .eq('auth_id', user.id)
+      .single();
+
+    if (profileError || !profile) {
       throw new Error('User profile not found');
     }
-    const profile = profileDoc.data();
 
     if (profile.subscription_tier !== 'F3') {
       throw new Error('Analytics access restricted to F3 users');
@@ -165,9 +188,12 @@ async function handleGetAnalytics(req: Request, context: AuthContext): Promise<R
     }
 
     // Build and execute query
-    const query = buildAnalyticsQuery(firestore, filters);
-    const snapshot = await query.get();
-    const events = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+    const query = buildAnalyticsQuery(filters);
+    const { data: events, error: queryError } = await query;
+
+    if (queryError) {
+      throw queryError;
+    }
 
     if (!events || events.length === 0) {
       return new Response(JSON.stringify({
@@ -211,21 +237,6 @@ async function handleGetAnalytics(req: Request, context: AuthContext): Promise<R
     const statusCode = error instanceof Error && 
       (message.includes('Date range') || message.includes('restricted')) ? 400 : 500;
 
-    // Log the error
-    try {
-      await context.firestore.collection('error_logs').add({
-        error_type: 'get_analytics_failed',
-        error_message: message,
-        metadata: {
-          request_url: req.url,
-          timestamp: new Date().toISOString(),
-          user_id: context.user.id
-        }
-      });
-    } catch (logError) {
-      console.error('Failed to log error:', logError);
-    }
-
     return new Response(JSON.stringify({ 
       error: message,
       code: error instanceof Error ? error.name : 'UnknownError'
@@ -234,36 +245,12 @@ async function handleGetAnalytics(req: Request, context: AuthContext): Promise<R
       status: statusCode
     });
   }
-}
+};
 
-export async function onRequest(req: Request, context: AuthContext): Promise<Response> {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  if (req.method !== 'GET') {
-    return new Response(JSON.stringify({
-      error: 'Method not allowed',
-      code: 'MethodNotAllowed'
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 405
-    });
-  }
-
-  try {
-    return await withAuth(req, context, handleGetAnalytics);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const statusCode = error instanceof Error && 
-      (message.includes('Date range') || message.includes('restricted')) ? 400 : 500;
-
-    return new Response(JSON.stringify({ 
-      error: message,
-      code: error instanceof Error ? error.name : 'UnknownError'
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: statusCode
-    });
-  }
-}
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+  'Cache-Control': 'no-cache'
+};

@@ -29,7 +29,7 @@ describe('EncryptionService', () => {
     // Encrypt data
     const { encryptedData } = await service.encryptFile(testData);
     
-    // Trying to verify with invalid hash
+    // Try to verify with invalid hash
     const isValid = await service.verifyHash(encryptedData, 'invalid_hash');
     expect(isValid).toBe(false);
   });

@@ -1,181 +1,67 @@
-# AZ-Genes Genetic Data Platform
-
-A Next.js application for managing genetic data with Firebase/Firestore backend, Hedera blockchain integration, and Flutter mobile compatibility.
-
-## Tech Stack
-
-- **Frontend**: Next.js 15, React 19, TypeScript
-- **Backend**: Firebase Admin SDK, Firestore, Firebase Storage
-- **Authentication**: Firebase Auth (Email Link + Phone OTP)
-- **Blockchain**: Hedera Hashgraph SDK
-- **Testing**: Vitest
-
-## Prerequisites
-
-- Node.js 18.18+ or 20+
-- npm or pnpm
-- Firebase project with:
-  - Authentication enabled (Email Link + Phone OTP)
-  - Firestore database
-  - Storage bucket
-  - Service Account JSON (for Admin SDK)
-
-## Environment Setup
-
-Create a `.env.local` file in the project root:
-
-```bash
-# Firebase Admin (Server-side - from Service Account JSON)
-FIREBASE_PROJECT_ID=az-genes-1ca88
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@az-genes-1ca88.iam.gserviceaccount.com
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...your-key-here...\n-----END PRIVATE KEY-----"
-FIREBASE_STORAGE_BUCKET=az-genes-1ca88.firebasestorage.app
-
-# Firebase Client (Web - from Firebase Console)
-NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyBNYfeKLLyZ4SKpCCkYkftbEFBShMgcBCI
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=az-genes-1ca88.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=az-genes-1ca88
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=az-genes-1ca88.firebasestorage.app
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=682920435841
-NEXT_PUBLIC_FIREBASE_APP_ID=1:682920435841:web:69e41dea36da2e2aa92d80
-NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=G-S347C6MQH6
-
-# Hedera Configuration
-HEDERA_OPERATOR_ID=0.0.xxxxxx
-HEDERA_OPERATOR_KEY=302e0201003005...
-HEDERA_NETWORK=testnet
-HEDERA_TOPIC_ID=0.0.xxxxxx
-HEDERA_CONTRACT_ID=0.0.xxxxxx
-MIRROR_NODE_BASE_URL=https://testnet.mirrornode.hedera.com
-```
-
-**Note**: The client Firebase config values are already hardcoded in `lib/firebase.ts` as defaults, but can be overridden via env vars.
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
 
-### 1. Install Dependencies
-
-```bash
-npm install
-# or
-pnpm install
-```
-
-### 2. Set Up Firebase
-
-1. **Enable Authentication**:
-   - Go to Firebase Console → Authentication → Sign-in method
-   - Enable "Email/Password" and configure Email link sign-in
-   - Enable "Phone" authentication for OTP sign-in
-   - **Important for Phone Auth**: Make sure your Firebase project is on a **Blaze (pay-as-you-go) plan**
-   - Add your authorized domains (localhost for development, your domain for production)
-   - reCAPTCHA Enterprise will be automatically enabled for phone authentication
-
-2. **Create Firestore Database**:
-   - Go to Firestore Database → Create database
-   - Start in test mode (or set up security rules)
-
-3. **Service Account**:
-   - Project Settings → Service Accounts
-   - Generate new private key → Download JSON
-   - Extract `client_email`, `private_key`, and `project_id` for `.env.local`
-
-### 3. Run Development Server
+First, run the development server:
 
 ```bash
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see the app.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## API Endpoints
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-All endpoints require Firebase ID token in `Authorization: Bearer <token>` header.
-
-- `GET /api/get-profile` - Get user profile
-- `POST /api/upload-file` - Upload genetic data file (multipart/form-data)
-- `GET /api/get-file?fileId=<id>` - Download file
-- `POST /api/grant-access` - Grant access to F2 users
-- `POST /api/revoke-access` - Revoke access
-- `DELETE /api/files/[id]` - Delete file
-- `GET /api/get-analytics` - Get analytics (F3 users only)
-
-## Project Structure
-
-```
-├── app/
-│   ├── api/              # Next.js API routes (Node.js runtime)
-│   ├── auth/             # Auth callback pages
-│   ├── dashboard/         # Dashboard pages
-│   └── sign-in/          # Auth pages
-├── components/            # React components
-├── lib/
-│   ├── firebase.ts       # Firebase client config
-│   ├── firebaseAdmin.ts  # Firebase Admin SDK
-│   ├── storageAdapter.ts # Storage adapter for server
-│   ├── apiClient.ts      # API client with auth
-│   └── useAuth.ts        # Auth hook
-└── src/
-    ├── functions/edge/    # Edge function handlers
-    └── services/          # Services (Hedera, encryption)
-```
-
-## Testing
-
-```bash
-# Run tests
-npm test
-
-# Test mode automatically uses mock auth
-NODE_ENV=test npm test
-```
-
-## Firebase Security Rules (for Flutter App)
-
-If your Flutter app accesses Firestore/Storage directly, add these rules:
-
-**Firestore**:
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /user_profiles/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    match /files/{fileId} {
-      allow read: if request.auth != null && 
-        (resource.data.owner_id == request.auth.uid || 
-         exists(/databases/$(database)/documents/file_permissions/$(fileId)));
-    }
-  }
-}
-```
-
-**Storage**:
-```javascript
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-  }
-}
-```
-
-## Deployment
-
-Deploy to Vercel or any Node.js-compatible platform:
-
-```bash
-npm run build
-npm start
-```
-
-Ensure all environment variables are set in your deployment platform.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
 
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Firebase Documentation](https://firebase.google.com/docs)
-- [Hedera SDK Documentation](https://docs.hedera.com/)
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Testing locally with the mock API server
+
+This repository includes a lightweight in-process mock API server used by the test suite so you can run
+integration tests entirely offline without a real Supabase backend or running the full Next server.
+
+How it works
+- The mock server lives at `tests/mockServer.ts` and implements the subset of endpoints the tests exercise
+	(upload, grant-access, get-file, get-analytics and file deletion).
+- Test helpers in `tests/helpers.ts` use an in-memory mocked Supabase client (`tests/mocks/supabase.ts`) to
+	create users and sessions. The helpers start the mock server on port 3000 so tests that call
+	`http://localhost:3000/api/*` hit the local handlers.
+
+Run tests
+
+Use the project's test runner (Vitest) via the npm script. From the repository root:
+
+```powershell
+$env:NODE_ENV = 'test'; npm test
+```
+
+If you want verbose debugging for test server/auth flows, enable DEBUG:
+
+```powershell
+$env:DEBUG = 'az-genes:*'; $env:NODE_ENV = 'test'; npm test
+```
+
+Notes
+- The mock server is intentionally simple and intended only for tests. It does not persist data between
+	runs and is not secure—do not use it for production traffic.
+- If you prefer to skip auth during tests, you can relax middleware checks in test mode; see `src/functions/edge/middleware/auth.ts`.
