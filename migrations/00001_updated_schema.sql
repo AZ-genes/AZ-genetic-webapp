@@ -9,7 +9,7 @@ CREATE TYPE subscription_tier AS ENUM ('F1', 'F2', 'F3');
 DROP TABLE IF EXISTS user_profiles CASCADE;
 CREATE TABLE user_profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    auth_id UUID UNIQUE NOT NULL,
+    auth_id TEXT UNIQUE NOT NULL,
     subscription_tier subscription_tier NOT NULL DEFAULT 'F1',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -108,74 +108,78 @@ CREATE INDEX IF NOT EXISTS idx_file_access_logs_file_id ON file_access_logs(file
 CREATE INDEX IF NOT EXISTS idx_file_access_logs_user_id ON file_access_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_event_type ON analytics_events(event_type);
 
+-- Row Level Security is disabled because we're using Firebase Auth tokens
+-- Security is enforced in API functions by checking user ownership via profile lookups
+-- When switching to Supabase Auth, uncomment the below policies
+
 -- Enable Row Level Security
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE files ENABLE ROW LEVEL SECURITY;
-ALTER TABLE file_permissions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE file_access_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE files ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE file_permissions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE file_access_logs ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for user_profiles
-CREATE POLICY "Users can read their own profile"
-    ON user_profiles FOR SELECT
-    USING (auth.uid() = auth_id);
-
-CREATE POLICY "Users can update their own profile"
-    ON user_profiles FOR UPDATE
-    USING (auth.uid() = auth_id);
+-- CREATE POLICY "Users can read their own profile"
+--     ON user_profiles FOR SELECT
+--     USING (auth.uid() = auth_id);
+--
+-- CREATE POLICY "Users can update their own profile"
+--     ON user_profiles FOR UPDATE
+--     USING (auth.uid() = auth_id);
 
 -- Create policies for files
-CREATE POLICY "Users can read their own files"
-    ON files FOR SELECT
-    USING (owner_id IN (
-        SELECT id FROM user_profiles WHERE auth_id = auth.uid()
-    ));
-
-CREATE POLICY "Users can read shared files"
-    ON files FOR SELECT
-    USING (id IN (
-        SELECT file_id FROM file_permissions
-        WHERE grantee_id IN (
-            SELECT id FROM user_profiles WHERE auth_id = auth.uid()
-        )
-        AND status = 'active'
-        AND expires_at > NOW()
-    ));
+-- CREATE POLICY "Users can read their own files"
+--     ON files FOR SELECT
+--     USING (owner_id IN (
+--         SELECT id FROM user_profiles WHERE auth_id = auth.uid()
+--     ));
+--
+-- CREATE POLICY "Users can read shared files"
+--     ON files FOR SELECT
+--     USING (id IN (
+--         SELECT file_id FROM file_permissions
+--         WHERE grantee_id IN (
+--             SELECT id FROM user_profiles WHERE auth_id = auth.uid()
+--         )
+--         AND status = 'active'
+--         AND expires_at > NOW()
+--     ));
 
 -- Create policies for file_permissions
-CREATE POLICY "F1 users can grant access"
-    ON file_permissions FOR INSERT
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM user_profiles up
-            JOIN files f ON f.owner_id = up.id
-            WHERE up.auth_id = auth.uid()
-            AND up.subscription_tier = 'F1'
-            AND f.id = file_id
-        )
-    );
-
-CREATE POLICY "Users can view permissions for their files"
-    ON file_permissions FOR SELECT
-    USING (
-        file_id IN (
-            SELECT id FROM files WHERE owner_id IN (
-                SELECT id FROM user_profiles WHERE auth_id = auth.uid()
-            )
-        )
-        OR
-        grantee_id IN (
-            SELECT id FROM user_profiles WHERE auth_id = auth.uid()
-        )
-    );
+-- CREATE POLICY "F1 users can grant access"
+--     ON file_permissions FOR INSERT
+--     WITH CHECK (
+--         EXISTS (
+--             SELECT 1 FROM user_profiles up
+--             JOIN files f ON f.owner_id = up.id
+--             WHERE up.auth_id = auth.uid()
+--             AND up.subscription_tier = 'F1'
+--             AND f.id = file_id
+--         )
+--     );
+--
+-- CREATE POLICY "Users can view permissions for their files"
+--     ON file_permissions FOR SELECT
+--     USING (
+--         file_id IN (
+--             SELECT id FROM files WHERE owner_id IN (
+--                 SELECT id FROM user_profiles WHERE auth_id = auth.uid()
+--             )
+--         )
+--         OR
+--         grantee_id IN (
+--             SELECT id FROM user_profiles WHERE auth_id = auth.uid()
+--         )
+--     );
 
 -- Create policies for analytics
-CREATE POLICY "F3 users can read analytics"
-    ON analytics_events FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM user_profiles
-            WHERE auth_id = auth.uid()
-            AND subscription_tier = 'F3'
-        )
-    );
+-- CREATE POLICY "F3 users can read analytics"
+--     ON analytics_events FOR SELECT
+--     USING (
+--         EXISTS (
+--             SELECT 1 FROM user_profiles
+--             WHERE auth_id = auth.uid()
+--             AND subscription_tier = 'F3'
+--         )
+--     );

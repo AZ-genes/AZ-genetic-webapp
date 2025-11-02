@@ -10,25 +10,26 @@ async function handleTransferTokens(req: Request, context: AuthContext): Promise
   }
 
   try {
-    const { user, firestore } = context;
+    const { user, supabase } = context;
 
     if (!user) {
       throw new Error('User not authenticated');
     }
 
-    if (!firestore || typeof firestore.collection !== 'function') {
-      throw new Error('Firestore is not properly initialized. Please check Firebase Admin configuration.');
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
     }
 
-    const profileRef = firestore.collection('user_profiles').doc(user.uid);
-    const profileDoc = await profileRef.get();
+    // Get user profile
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('auth_id', user.id)
+      .single();
 
-    if (!profileDoc.exists) {
+    if (profileError || !profile) {
       throw new Error('User profile not found');
     }
-    const profile = profileDoc.data();
-    // Profile ID is the Firestore document ID
-    const profileId = profileDoc.id;
 
     const body = await req.json();
     const { recipientAccountId, amount: amountRaw } = body;
@@ -41,17 +42,24 @@ async function handleTransferTokens(req: Request, context: AuthContext): Promise
     }
 
     // Perform token transfer using HederaClient
-    const transactionId = await hederaClient.transferTokens(profileId, recipientAccountId, amount);
+    const transactionId = await hederaClient.transferTokens(profile.id, recipientAccountId, amount);
 
-    // Log the transaction
-    await firestore.collection('token_transactions').add({
-      sender_id: profileId,
-      recipient_id: recipientAccountId,
-      amount: amount,
-      transaction_id: transactionId,
-      timestamp: new Date().toISOString(),
-      status: 'completed',
-    });
+    // Log the transaction in Supabase
+    const { error: insertError } = await supabase
+      .from('token_transactions')
+      .insert({
+        sender_id: profile.id,
+        recipient_id: recipientAccountId,
+        amount: amount,
+        transaction_id: transactionId,
+        timestamp: new Date().toISOString(),
+        status: 'completed',
+      });
+
+    if (insertError) {
+      console.error('Failed to log transaction:', insertError);
+      // Don't fail the whole request if logging fails
+    }
 
     return new Response(JSON.stringify({ transactionId }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

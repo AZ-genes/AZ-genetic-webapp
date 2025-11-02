@@ -7,21 +7,24 @@ async function handleGetTokenTransactions(req: Request, context: AuthContext): P
   }
 
   try {
-    const { user, firestore } = context;
+    const { user, supabase } = context;
 
     if (!user) {
       throw new Error('User not authenticated');
     }
 
-    if (!firestore || typeof firestore.collection !== 'function') {
-      throw new Error('Firestore is not properly initialized. Please check Firebase Admin configuration.');
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
     }
 
-    // Get user profile to use profile.id
-    const profileRef = firestore.collection('user_profiles').doc(user.uid);
-    const profileDoc = await profileRef.get();
+    // Get user profile
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('auth_id', user.id)
+      .single();
 
-    if (!profileDoc.exists) {
+    if (profileError || !profile) {
       // Return empty array if profile doesn't exist yet
       return new Response(JSON.stringify([]), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -29,32 +32,38 @@ async function handleGetTokenTransactions(req: Request, context: AuthContext): P
       });
     }
 
-    // Profile ID is the Firestore document ID
-    const profileId = profileDoc.id;
-
     // Query transactions where user is sender or recipient
-    // Use simpler queries without orderBy to avoid index requirement, then sort in memory
-    const sentTransactionsRef = firestore.collection('token_transactions')
-      .where('sender_id', '==', profileId);
-    
-    const receivedTransactionsRef = firestore.collection('token_transactions')
-      .where('recipient_id', '==', profileId);
+    // Supabase doesn't have a great .or() syntax, so we'll fetch both and combine
+    const { data: sentTransactions, error: sentError } = await supabase
+      .from('token_transactions')
+      .select('*')
+      .eq('sender_id', profile.id);
 
-    const [sentSnapshot, receivedSnapshot] = await Promise.all([
-      sentTransactionsRef.get(),
-      receivedTransactionsRef.get()
-    ]);
+    const { data: receivedTransactions, error: receivedError } = await supabase
+      .from('token_transactions')
+      .select('*')
+      .eq('recipient_id', profile.id);
 
-    // Combine and sort transactions in memory (avoids need for composite index)
+    // Handle errors
+    if (sentError || receivedError) {
+      console.error('Error fetching transactions:', sentError || receivedError);
+      // Return empty array on error
+      return new Response(JSON.stringify([]), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      });
+    }
+
+    // Combine and sort transactions in memory
     const allTransactions = [
-      ...sentSnapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data(),
+      ...(sentTransactions || []).map((tx: any) => ({
+        id: tx.id,
+        ...tx,
         type: 'spent' as const
       })),
-      ...receivedSnapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data(),
+      ...(receivedTransactions || []).map((tx: any) => ({
+        id: tx.id,
+        ...tx,
         type: 'received' as const
       }))
     ].sort((a, b) => {
