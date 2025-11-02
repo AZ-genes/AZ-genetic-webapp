@@ -133,10 +133,7 @@ async function validateGrantee(
     throw new Error('Grantee not found');
   }
 
-  if (grantee.subscription_tier !== 'F2') {
-    throw new Error('Can only grant access to F2 users');
-  }
-
+  // Allow sharing with all tiers
   return grantee;
 }
 

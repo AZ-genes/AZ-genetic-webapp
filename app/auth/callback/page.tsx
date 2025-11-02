@@ -21,21 +21,19 @@ export default function AuthCallback() {
                         window.localStorage.removeItem('emailForSignIn');
                         window.localStorage.removeItem('userNameForSignIn');
                         
-                        // Create profile with name if this is first sign-in
-                        if (userName) {
-                            try {
-                                const token = await auth.currentUser?.getIdToken();
-                                await fetch('/api/get-profile', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${token}`
-                                    },
-                                    body: JSON.stringify({ name: userName })
-                                });
-                            } catch (err) {
-                                console.error('Failed to create profile:', err);
-                            }
+                        // Ensure profile exists (with or without name for sign-up)
+                        try {
+                            const token = await auth.currentUser?.getIdToken();
+                            await fetch('/api/get-profile', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                },
+                                body: userName ? JSON.stringify({ name: userName }) : '{}'
+                            });
+                        } catch (err) {
+                            console.error('Failed to create profile:', err);
                         }
                         
                         router.push('/dashboard');
