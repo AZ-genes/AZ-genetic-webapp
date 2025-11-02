@@ -2,7 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useHederaWallet } from '@/context/HederaWalletContext';
+import { useToast } from '@/context/ToastContext';
 import { api } from '@/lib/apiClient';
+import Spinner from '@/components/ui/Spinner';
+import { TableSkeleton } from '@/components/ui/Skeleton';
+import EmptyState from '@/components/ui/EmptyState';
 
 
 // Types
@@ -51,6 +55,7 @@ const AZGenesDashboard = () => {
   
   // Use real Hedera wallet context
   const { isConnected: isWalletConnected, connectWallet, disconnectWallet, accountId } = useHederaWallet();
+  const toast = useToast();
 
   const privateData = userData.filter(item => item.isPrivate);
   const publicData = userData.filter(item => !item.isPrivate);
@@ -81,7 +86,7 @@ const AZGenesDashboard = () => {
   const handleConnectWallet = async () => {
     try {
       await connectWallet();
-      setShowConnectModal(false);
+    setShowConnectModal(false);
     } catch (error) {
       console.error('Failed to connect wallet:', error);
     }
@@ -147,6 +152,20 @@ const AZGenesDashboard = () => {
     loadFiles();
   }, []);
 
+  // Auto-collapse sidebar on mobile
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024 && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+    
+    handleResize(); // Run on mount
+    window.addEventListener('resize', handleResize);
+    
+    return () => window.removeEventListener('resize', handleResize);
+  }, [sidebarOpen]);
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -160,16 +179,16 @@ const AZGenesDashboard = () => {
 
       if (!response.ok) {
         const error = await response.json();
-        alert(`Failed to upload file: ${error.error}`);
+        toast.error(`Failed to upload file: ${error.error}`);
         return;
       }
 
       // Reload files
       await loadFiles();
-      alert('File uploaded successfully!');
+      toast.success('File uploaded successfully!');
     } catch (error) {
       console.error('Error uploading file:', error);
-      alert('Failed to upload file');
+      toast.error('Failed to upload file');
     } finally {
       setIsUploading(false);
       // Reset the file input
@@ -195,7 +214,7 @@ const AZGenesDashboard = () => {
 
       if (!response.ok) {
         const error = await response.json();
-        alert(`Failed to mint NFT: ${error.error}`);
+        toast.error(`Failed to mint NFT: ${error.error}`);
         return;
       }
 
@@ -210,10 +229,10 @@ const AZGenesDashboard = () => {
       
       // Reload files and NFTs
       await loadFiles();
-      alert('NFT Certificate minted successfully!');
+      toast.success('NFT Certificate minted successfully!');
     } catch (error) {
       console.error('Error minting NFT:', error);
-      alert('Failed to mint NFT certificate');
+      toast.error('Failed to mint NFT certificate');
     } finally {
       setMintingFileId(null);
     }
@@ -380,8 +399,9 @@ const AZGenesDashboard = () => {
           <button 
             onClick={() => handleMintNFT(item.id)}
             disabled={mintingFileId === item.id}
-            className="text-indigo-600 hover:text-indigo-700 text-sm font-medium disabled:opacity-50"
+            className="text-indigo-600 hover:text-indigo-700 text-sm font-medium disabled:opacity-50 flex items-center gap-1 active:scale-95"
           >
+            {mintingFileId === item.id && <Spinner size="sm" />}
             {mintingFileId === item.id ? 'Minting...' : 'Get Certified'}
           </button>
         )}
@@ -621,8 +641,9 @@ const AZGenesDashboard = () => {
                       <button 
                         onClick={handleUploadClick}
                         disabled={isUploading}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
+                        {isUploading && <Spinner size="sm" />}
                         {isUploading ? 'Uploading...' : 'Upload New Data'}
                       </button>
                       <input
@@ -635,30 +656,48 @@ const AZGenesDashboard = () => {
                     </div>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Name</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NFT Certified</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {/* Public Data */}
-                      {publicData.map((item) => (
-                        <DataItemRow key={item.id} item={item} />
-                      ))}
-                      {/* Private Data */}
-                      {privateData.map((item) => (
-                        <DataItemRow key={item.id} item={item} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {loadingFiles ? (
+                  <div className="p-6">
+                    <TableSkeleton rows={6} />
+                  </div>
+                ) : userData.length === 0 ? (
+                  <div className="p-6">
+                    <EmptyState
+                      icon="📁"
+                      title="No Files Yet"
+                      description="Upload your first genetic data file to get started with NFT certification and secure storage."
+                      action={{
+                        label: "Upload New Data",
+                        onClick: handleUploadClick
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Name</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NFT Certified</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {/* Public Data */}
+                        {publicData.map((item) => (
+                          <DataItemRow key={item.id} item={item} />
+                        ))}
+                        {/* Private Data */}
+                        {privateData.map((item) => (
+                          <DataItemRow key={item.id} item={item} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
