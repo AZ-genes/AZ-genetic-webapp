@@ -7,33 +7,60 @@ async function handleGetAccessRequests(req: Request, context: AuthContext): Prom
   }
 
   try {
-    const { user, firestore } = context;
+    const { user, supabase } = context;
 
     if (!user) {
       throw new Error('User not authenticated');
     }
 
-    // Get file permissions where the current user is the grantee (i.e., requests made to their files)
-    const permissionsSnapshot = await firestore.collection('file_permissions')
-      .where('grantee_id', '==', user.uid)
-      .where('status', '==', 'pending') // Only show pending requests for now
-      .get();
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
 
+    // Get user profile
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('auth_id', user.id)
+      .single();
+
+    if (profileError || !profile) {
+      throw new Error('User profile not found');
+    }
+
+    // Get file permissions where the current user is the grantee (i.e., requests made to their files)
+    const { data: permissions, error: permissionsError } = await supabase
+      .from('file_permissions')
+      .select('*')
+      .eq('grantee_id', profile.id)
+      .eq('status', 'pending'); // Only show pending requests for now
+
+    if (permissionsError) {
+      throw new Error('Failed to fetch access requests');
+    }
+
+    // Get files for these permissions
     const accessRequests: any[] = [];
-    for (const doc of permissionsSnapshot.docs) {
-      const permission = doc.data();
-      const fileSnapshot = await firestore.collection('files').doc(permission.file_id).get();
-      if (fileSnapshot.exists) {
-        accessRequests.push({
-          id: doc.id,
-          file_id: fileSnapshot.id,
-          file_name: fileSnapshot.data().file_name,
-          owner_id: permission.owner_id,
-          access_type: permission.access_type,
-          request_date: new Date(permission.created_at).toLocaleDateString(),
-          status: permission.status,
-          ...permission,
-        });
+    if (permissions && permissions.length > 0) {
+      for (const permission of permissions) {
+        const { data: file, error: fileError } = await supabase
+          .from('files')
+          .select('*')
+          .eq('id', permission.file_id)
+          .single();
+        
+        if (!fileError && file) {
+          accessRequests.push({
+            id: permission.id,
+            file_id: file.id,
+            file_name: file.file_name,
+            owner_id: permission.granted_by,
+            access_level: permission.access_level,
+            request_date: new Date(permission.created_at).toLocaleDateString(),
+            status: permission.status,
+            ...permission,
+          });
+        }
       }
     }
 

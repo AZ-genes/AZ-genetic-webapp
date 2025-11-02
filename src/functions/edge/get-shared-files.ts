@@ -7,43 +7,59 @@ async function handleGetSharedFiles(req: Request, context: AuthContext): Promise
   }
 
   try {
-    const { user, firestore } = context;
+    const { user, supabase } = context;
 
     if (!user) {
       throw new Error('User not authenticated');
     }
 
-    // Get user profile to use profile.id
-    const profileRef = firestore.collection('user_profiles').doc(user.uid);
-    const profileDoc = await profileRef.get();
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
 
-    if (!profileDoc.exists) {
+    // Get user profile
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('auth_id', user.id)
+      .single();
+
+    if (profileError || !profile) {
       throw new Error('User profile not found');
     }
 
-    // Profile ID is the Firestore document ID
-    const profileId = profileDoc.id;
-
     // Get file permissions where the current user granted access (granted_by)
-    const permissionsSnapshot = await firestore.collection('file_permissions')
-      .where('granted_by', '==', profileId)
-      .where('status', '==', 'active')
-      .get();
+    const { data: permissions, error: permissionsError } = await supabase
+      .from('file_permissions')
+      .select('*')
+      .eq('granted_by', profile.id)
+      .eq('status', 'active');
 
+    if (permissionsError) {
+      throw new Error('Failed to fetch shared files');
+    }
+
+    // Get files for these permissions
     const sharedFiles: any[] = [];
-    for (const doc of permissionsSnapshot.docs) {
-      const permission = doc.data();
-      const fileSnapshot = await firestore.collection('files').doc(permission.file_id).get();
-      if (fileSnapshot.exists) {
-        sharedFiles.push({
-          id: doc.id,
-          file_id: fileSnapshot.id,
-          file_name: fileSnapshot.data().file_name,
-          grantee_id: permission.grantee_id,
-          access_type: permission.access_type,
-          expires_at: permission.expires_at,
-          ...permission,
-        });
+    if (permissions && permissions.length > 0) {
+      for (const permission of permissions) {
+        const { data: file, error: fileError } = await supabase
+          .from('files')
+          .select('*')
+          .eq('id', permission.file_id)
+          .single();
+        
+        if (!fileError && file) {
+          sharedFiles.push({
+            id: permission.id,
+            file_id: file.id,
+            file_name: file.file_name,
+            grantee_id: permission.grantee_id,
+            access_level: permission.access_level,
+            expires_at: permission.expires_at,
+            ...permission,
+          });
+        }
       }
     }
 

@@ -18,16 +18,24 @@ export async function onRequest(req: Request, context: AuthContext): Promise<Res
 
   try {
     return await withAuth(req, context, async (req, context) => {
-      const { user, firestore } = context;
+      const { user, supabase } = context;
 
       if (!user) {
         throw new Error('User not authenticated');
       }
 
-      const profileRef = firestore.collection('user_profiles').doc(user.uid);
-      const profileDoc = await profileRef.get();
+      if (!supabase) {
+        throw new Error('Supabase client not initialized');
+      }
 
-      if (!profileDoc.exists) {
+      // Check if profile exists
+      const { data: existingProfile, error: fetchError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('auth_id', user.id)
+        .single();
+
+      if (!existingProfile) {
         // Get name from request body if provided (from sign-up)
         let profileName = null;
         try {
@@ -38,7 +46,7 @@ export async function onRequest(req: Request, context: AuthContext): Promise<Res
         }
         
         const newProfile: any = {
-          auth_id: user.uid,
+          auth_id: user.id,
           subscription_tier: 'F1',
           email: user.email || null,
         };
@@ -47,24 +55,24 @@ export async function onRequest(req: Request, context: AuthContext): Promise<Res
           newProfile.name = profileName;
         }
         
-        await profileRef.set(newProfile);
+        const { data: createdProfile, error: createError } = await supabase
+          .from('user_profiles')
+          .insert(newProfile)
+          .select()
+          .single();
 
-        // Return profile with document ID
-        return new Response(JSON.stringify({
-          ...newProfile,
-          id: profileRef.id
-        }), {
+        if (createError) {
+          throw new Error(`Failed to create profile: ${createError.message}`);
+        }
+
+        return new Response(JSON.stringify(createdProfile), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 201,
         });
       }
 
-      // Return profile with document ID
-      const profileData = profileDoc.data();
-      return new Response(JSON.stringify({
-        ...profileData,
-        id: profileDoc.id
-      }), {
+      // Return existing profile
+      return new Response(JSON.stringify(existingProfile), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     });

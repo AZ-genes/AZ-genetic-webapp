@@ -153,13 +153,7 @@ const AZGenesDashboard = () => {
 
     setMintingFileId(fileId);
     try {
-      const response = await fetch('/api/mint-nft-certificate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fileId }),
-      });
+      const response = await api.post('mint-nft-certificate', { fileId });
 
       if (!response.ok) {
         const error = await response.json();

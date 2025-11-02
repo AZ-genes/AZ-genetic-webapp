@@ -7,33 +7,39 @@ export async function handleGetFiles(req: Request, context: AuthContext): Promis
   }
 
   try {
-    const { user, firestore } = context;
+    const { user, supabase } = context;
 
     if (!user) {
       throw new Error('User not authenticated');
     }
 
-    // Get user profile to use profile.id instead of user.uid
-    const profileRef = firestore.collection('user_profiles').doc(user.uid);
-    const profileDoc = await profileRef.get();
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
 
-    if (!profileDoc.exists) {
+    // Get user profile
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('auth_id', user.id)
+      .single();
+
+    if (profileError || !profile) {
       throw new Error('User profile not found');
     }
 
-    const profile = profileDoc.data();
-    // Profile ID is the Firestore document ID
-    const profileId = profileDoc.id;
+    // Get user's files
+    const { data: files, error: filesError } = await supabase
+      .from('files')
+      .select('*')
+      .eq('owner_id', profile.id)
+      .order('created_at', { ascending: false });
 
-    const filesRef = firestore.collection('files').where('owner_id', '==', profileId);
-    const snapshot = await filesRef.get();
+    if (filesError) {
+      throw new Error('Failed to fetch files');
+    }
 
-    const files = snapshot.docs.map((doc: any) => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    return new Response(JSON.stringify(files), {
+    return new Response(JSON.stringify(files || []), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200
     });

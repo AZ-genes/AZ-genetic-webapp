@@ -33,22 +33,23 @@ function checkRateLimit(userId: string): boolean {
 }
 
 async function verifyF2Access(
-  firestore: AuthContext['firestore'],
+  supabase: any,
   fileId: string,
   userId: string
 ): Promise<boolean> {
-  const permissionsQuery = firestore.collection('file_permissions')
-    .where('file_id', '==', fileId)
-    .where('grantee_id', '==', userId)
-    .where('status', '==', 'active')
-    .where('expires_at', '>=', new Date().toISOString());
-  const snapshot = await permissionsQuery.get();
+  const { data: permissions, error: permissionsError } = await supabase
+    .from('file_permissions')
+    .select('*')
+    .eq('file_id', fileId)
+    .eq('grantee_id', userId)
+    .eq('status', 'active')
+    .gte('expires_at', new Date().toISOString());
 
-  if (snapshot.empty) {
+  if (permissionsError || !permissions || permissions.length === 0) {
     return false;
   }
 
-  const permission = snapshot.docs[0].data();
+  const permission = permissions[0];
 
   // Verify the permission on Hedera (smart contract)
   try {
@@ -66,20 +67,25 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
   }
 
   try {
-    const { user, firestore, storage } = context;
+    const { user, supabase } = context;
 
-    const profileRef = firestore.collection('user_profiles').doc(user.uid);
-    const profileDoc = await profileRef.get();
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
 
-    if (!profileDoc.exists) {
+    // Get user profile
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('auth_id', user.id)
+      .single();
+
+    if (profileError || !profile) {
       throw new Error('User profile not found');
     }
-    const profile = profileDoc.data();
-    // Profile ID is the Firestore document ID
-    const profileId = profileDoc.id;
 
     // Check rate limit
-    if (!checkRateLimit(profileId)) {
+    if (!checkRateLimit(profile.id)) {
       throw new Error(`Download limit exceeded. Maximum ${MAX_DOWNLOADS_PER_HOUR} downloads per hour.`);
     }
 
@@ -91,18 +97,20 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
     }
 
     // Get file metadata
-    const fileRef = firestore.collection('files').doc(fileId);
-    const fileDoc = await fileRef.get();
+    const { data: file, error: fileError } = await supabase
+      .from('files')
+      .select('*')
+      .eq('id', fileId)
+      .single();
 
-    if (!fileDoc.exists) {
+    if (fileError || !file) {
       throw new Error('File not found');
     }
-    const file = fileDoc.data();
 
     // Check access permissions
-    if (file.owner_id !== profileId) {
+    if (file.owner_id !== profile.id) {
       if (profile.subscription_tier === 'F2') {
-        const hasAccess = await verifyF2Access(firestore, fileId, profileId);
+        const hasAccess = await verifyF2Access(supabase, fileId, profile.id);
         if (!hasAccess) {
           throw new Error('Access denied');
         }
@@ -111,9 +119,15 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
       }
     }
 
-    // Download encrypted file from storage
-    const storageRef = storage.ref(file.storage_path);
-    const encryptedData = await storage.getBlob(storageRef);
+    // Download encrypted file from Supabase Storage
+    const { data: encryptedData, error: downloadError } = await supabase.storage
+      .from('encrypted-files')
+      .download(file.storage_path);
+
+    if (downloadError || !encryptedData) {
+      throw new Error('Failed to download file');
+    }
+
     const encryptedBuffer = Buffer.from(await encryptedData.arrayBuffer());
 
     // Verify file integrity
@@ -146,11 +160,12 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
       );
 
       // Add audit log
-      await firestore.collection('file_access_logs').add({
+      await supabase.from('file_access_logs').insert({
         file_id: fileId,
-        user_id: profileId,
+        user_id: profile.id,
         access_type: 'download',
-        status: 'success'
+        status: 'success',
+        created_at: new Date().toISOString()
       });
 
       // Return decrypted file
@@ -167,12 +182,13 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
       });
     } catch (decryptError) {
       // Log decryption failure
-      await firestore.collection('file_access_logs').add({
+      await supabase.from('file_access_logs').insert({
         file_id: fileId,
-        user_id: profileId,
+        user_id: profile.id,
         access_type: 'download',
         status: 'failed',
-        error: 'Decryption failed'
+        error: 'Decryption failed',
+        created_at: new Date().toISOString()
       });
       
       throw new Error('Failed to decrypt file');
@@ -184,21 +200,6 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
       (message.includes('limit exceeded') || 
        message.includes('Access denied') ||
        message.includes('not found')) ? 400 : 500;
-
-    // Log the error
-    try {
-      await context.firestore.collection('error_logs').add({
-        error_type: 'get_file_failed',
-        error_message: message,
-        metadata: {
-          request_url: req.url,
-          timestamp: new Date().toISOString(),
-          user_id: context.user.id
-        }
-      });
-    } catch (logError) {
-      console.error('Failed to log error:', logError);
-    }
 
     return new Response(JSON.stringify({ 
       error: message,

@@ -6,7 +6,11 @@ async function handleDelete(req: Request, context: AuthContext): Promise<Respons
     throw new Error('User not authenticated');
   }
 
-  const { firestore, storage, user } = context;
+  const { supabase, user } = context;
+
+  if (!supabase) {
+    throw new Error('Supabase client not initialized');
+  }
 
   // Extract file id from URL: /api/files/:id
   const url = new URL(req.url);
@@ -17,57 +21,80 @@ async function handleDelete(req: Request, context: AuthContext): Promise<Respons
   }
 
   // Fetch file metadata
-  const fileRef = firestore.collection('files').doc(fileId);
-  const fileDoc = await fileRef.get();
-  if (!fileDoc.exists) {
+  const { data: file, error: fileError } = await supabase
+    .from('files')
+    .select('*')
+    .eq('id', fileId)
+    .single();
+
+  if (fileError || !file) {
     return new Response(JSON.stringify({ error: 'Not found' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 404
     });
   }
 
-  const file = fileDoc.data();
+  // Get user profile
+  const { data: profile, error: profileError } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('auth_id', user.id)
+    .single();
 
-  // Get user profile to use profile.id
-  const profileRef = firestore.collection('user_profiles').doc(user.uid);
-  const profileDoc = await profileRef.get();
-
-  if (!profileDoc.exists) {
+  if (profileError || !profile) {
     return new Response(JSON.stringify({ error: 'User profile not found' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 404
     });
   }
 
-  // Profile ID is the Firestore document ID
-  const profileId = profileDoc.id;
-
   // Only owner can delete
-  if (file.owner_id !== profileId) {
+  if (file.owner_id !== profile.id) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 403
     });
   }
 
-  // Delete from storage (best-effort)
+  // Delete from Supabase storage (best-effort)
   try {
-    const ref = storage.ref(file.storage_path);
-    await storage.deleteObject(ref);
+    await supabase.storage
+      .from('encrypted-files')
+      .remove([file.storage_path]);
   } catch (e) {
     // ignore storage delete failures
+    console.error('Failed to delete from storage:', e);
   }
 
-  // Delete associated permissions and logs (best-effort batched deletes)
+  // Delete associated permissions and the file
   try {
-    const permsSnap = await firestore.collection('file_permissions').where('file_id', '==', fileId).get();
-    const batch = firestore.batch();
-    permsSnap.forEach((doc: any) => batch.delete(firestore.collection('file_permissions').doc(doc.id)));
-    batch.delete(fileRef);
-    await batch.commit();
-  } catch {
-    // fallback: delete file doc
-    await fileRef.delete();
+    // Delete permissions first (cascade should handle this but being explicit)
+    const { data: permissions } = await supabase
+      .from('file_permissions')
+      .select('id')
+      .eq('file_id', fileId);
+    
+    if (permissions && permissions.length > 0) {
+      for (const perm of permissions) {
+        await supabase.from('file_permissions').delete().eq('id', perm.id);
+      }
+    }
+
+    // Delete the file
+    const { error: deleteError } = await supabase
+      .from('files')
+      .delete()
+      .eq('id', fileId);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+  } catch (deleteErr) {
+    console.error('Failed to delete file:', deleteErr);
+    return new Response(JSON.stringify({ error: 'Failed to delete file' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 
   return new Response(JSON.stringify({ success: true }), {
@@ -90,5 +117,3 @@ export async function onRequest(req: Request, context: AuthContext): Promise<Res
 
   return withAuth(req, context, handleDelete);
 }
-
-
