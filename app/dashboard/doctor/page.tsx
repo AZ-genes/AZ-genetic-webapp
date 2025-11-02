@@ -46,6 +46,8 @@ const AZGenesDashboard = () => {
   const [mintingFileId, setMintingFileId] = useState<string | null>(null);
   const [userData, setUserData] = useState<DataItem[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   // Use real Hedera wallet context
   const { isConnected: isWalletConnected, connectWallet, disconnectWallet, accountId } = useHederaWallet();
@@ -144,6 +146,42 @@ const AZGenesDashboard = () => {
   useEffect(() => {
     loadFiles();
   }, []);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await api.post('upload-file', formData);
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Failed to upload file: ${error.error}`);
+        return;
+      }
+
+      // Reload files
+      await loadFiles();
+      alert('File uploaded successfully!');
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      alert('Failed to upload file');
+    } finally {
+      setIsUploading(false);
+      // Reset the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
 
   const handleMintNFT = async (fileId: string) => {
     if (!isWalletConnected) {
@@ -580,9 +618,20 @@ const AZGenesDashboard = () => {
                           <span>{privateData.length} private files</span>
                         </div>
                       )}
-                      <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
-                        Upload New Data
+                      <button 
+                        onClick={handleUploadClick}
+                        disabled={isUploading}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isUploading ? 'Uploading...' : 'Upload New Data'}
                       </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        onChange={handleFileUpload}
+                        style={{ display: 'none' }}
+                        accept=".vcf,.csv,.txt,.pdf"
+                      />
                     </div>
                   </div>
                 </div>
