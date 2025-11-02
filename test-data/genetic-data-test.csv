@@ -1,0 +1,32 @@
+CHROMOSOME,POSITION,REFERENCE,ALTERNATE,GENE,DISEASE ASSOCIATION,DRUG INTERACTION,RISK LEVEL
+1,1000,A,G,,,,Medium
+1,2000,C,T,,,,High
+2,1500,G,A,,,,Low
+2,3500,T,C,,,,Medium
+3,5000,A,T,,,,Medium
+4,2000,G,C,,,,Low
+5,1800,C,A,,,,Low
+6,7200,T,G,,,,Low
+7,1100,A,G,,,,High
+8,4400,C,T,,,,Low
+9,3100,G,A,,,,Medium
+10,6200,T,C,,,,High
+11,2500,A,C,,,,High
+12,8900,G,T,,,,Medium
+13,3700,C,A,,,,Medium
+14,5600,T,G,,,,Low
+15,2100,A,T,,,,Low
+16,7800,G,A,,,,Low
+17,4100,C,T,,,,High
+18,5200,T,C,,,,High
+19,2900,A,G,,,,High
+20,6600,G,T,,,,Medium
+21,3400,C,A,,,,Low
+22,4800,T,G,,,,High
+1,110922000,G,A,APOE,Alzheimer Risk,,Low
+4,3074875,C,A,HTT,Huntington Disease,,Low
+17,43044295,G,A,BRCA1,Breast Cancer Risk,,Medium
+13,32316461,T,C,BRCA2,Breast Cancer Risk,,Medium
+10,96541615,A,G,CYP2C19,,Clopidogrel (Poor Metabolizer),High
+22,42128992,G,A,CYP2D6,,Codeine (Ultrarapid Metabolizer),Medium
+7,87160645,T,C,CYP2C9,,Warfarin (Intermediate Metabolizer),Medium

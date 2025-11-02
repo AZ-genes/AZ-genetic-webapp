@@ -1,6 +1,8 @@
 export interface AuthContext {
   user?: any;
-  supabase: any;
+  supabase?: any;
+  firestore?: any;
+  storage?: any;
 }
 
 export interface EdgeFunctionConfig {

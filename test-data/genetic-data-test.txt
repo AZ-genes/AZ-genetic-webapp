@@ -1,0 +1,28 @@
+AZ-GENES GENETIC TESTING REPORT
+=================================
+
+Report Date: November 2, 2025
+Sample ID: TEST-8051
+
+SUMMARY
+-------
+Total Variants Analyzed: 50
+Disease Risk Variants: 4
+Pharmacogenetic Variants: 3
+Benign Variants: 43
+
+KEY FINDINGS
+------------
+• APOE ε4 allele detected - Increased risk for late-onset Alzheimer disease
+• CYP2C19 *2/*2 genotype - Poor metabolizer of clopidogrel
+• No pathogenic BRCA1/BRCA2 variants detected
+
+RECOMMENDATIONS
+---------------
+1. Consider alternative antiplatelet therapy to clopidogrel
+2. Implement cardiovascular risk reduction strategies
+3. Annual cognitive screening recommended
+4. Follow standard age-appropriate cancer screening guidelines
+
+For questions, please contact your healthcare provider.
+This report is for informational purposes only and does not constitute medical advice.

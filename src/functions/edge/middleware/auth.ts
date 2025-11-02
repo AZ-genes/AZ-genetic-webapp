@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { adminAuth } from '../../../../lib/firebaseAdmin';
 import { AuthContext, EdgeFunctionConfig, getEdgeConfig, corsHeaders, createTestClient } from '../utils';
 
 // Import mock verification only in test mode to avoid bundling test code
@@ -51,15 +52,29 @@ export async function withAuth(
           created_at: mockUser.created_at || new Date().toISOString()
         };
       } else {
-        // Normal Supabase auth with better error handling
-        const { data: { user }, error: userError } = await context.supabase.auth.getUser(token);
-        if (userError) {
-          throw new Error(`Token validation failed: ${userError.message}`);
+        // Try Firebase Admin verification first (since that's what's configured)
+        try {
+          const decodedToken = await adminAuth.verifyIdToken(token);
+          context.user = {
+            id: decodedToken.uid,
+            email: decodedToken.email,
+            uid: decodedToken.uid
+          };
+        } catch (firebaseError) {
+          // Fallback to Supabase auth if Firebase verification fails
+          if (context.supabase) {
+            const { data: { user }, error: userError } = await context.supabase.auth.getUser(token);
+            if (userError) {
+              throw new Error(`Token validation failed: ${userError.message}`);
+            }
+            if (!user) {
+              throw new Error('Token validation failed: No user found');
+            }
+            context.user = user;
+          } else {
+            throw new Error('No authentication provider configured');
+          }
         }
-        if (!user) {
-          throw new Error('Token validation failed: No user found');
-        }
-        context.user = user;
       }
 
       // Call the handler with auth context

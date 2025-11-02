@@ -1,6 +1,8 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
+import { useHederaWallet } from '@/context/HederaWalletContext';
+import { api } from '@/lib/apiClient';
 
 
 // Types
@@ -37,19 +39,16 @@ interface AccessRequest {
 const AZGenesDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [isPrivateDataUnlocked, setIsPrivateDataUnlocked] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
-
-
-  // Mock data
-  const userData: DataItem[] = [
-    { id: '1', name: 'Whole Genome Sequence', type: 'genetic', date: '2024-01-15', size: '2.3 GB', accessCount: 3, nftCertified: true, isPrivate: true, encrypted: true },
-    { id: '2', name: 'Blood Test Results', type: 'health', date: '2024-01-10', size: '15 MB', accessCount: 2, nftCertified: true, isPrivate: false, encrypted: false },
-    { id: '3', name: 'Professional Certificate', type: 'professional', date: '2024-01-05', size: '5 MB', accessCount: 1, nftCertified: true, isPrivate: false, encrypted: false },
-    { id: '4', name: 'Family Health History', type: 'health', date: '2024-01-01', size: '8 MB', accessCount: 0, nftCertified: false, isPrivate: true, encrypted: true },
-    { id: '5', name: 'Pharmacogenetic Profile', type: 'genetic', date: '2024-01-20', size: '45 MB', accessCount: 1, nftCertified: true, isPrivate: true, encrypted: true },
-  ];
+  const [nftCertificates, setNftCertificates] = useState<any[]>([]);
+  const [loadingNFTs, setLoadingNFTs] = useState(false);
+  const [mintingFileId, setMintingFileId] = useState<string | null>(null);
+  const [userData, setUserData] = useState<DataItem[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(true);
+  
+  // Use real Hedera wallet context
+  const { isConnected: isWalletConnected, connectWallet, disconnectWallet, accountId } = useHederaWallet();
 
   const privateData = userData.filter(item => item.isPrivate);
   const publicData = userData.filter(item => !item.isPrivate);
@@ -77,24 +76,145 @@ const AZGenesDashboard = () => {
     encryptedFiles: userData.filter(item => item.encrypted).length,
   };
 
-  const handleConnectWallet = () => {
-    // Simulate wallet connection
-    setIsWalletConnected(true);
-    setShowConnectModal(false);
+  const handleConnectWallet = async () => {
+    try {
+      await connectWallet();
+      setShowConnectModal(false);
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+    }
   };
 
-  const handleUnlockPrivateData = () => {
+  const handleUnlockPrivateData = async () => {
     if (!isWalletConnected) {
       setShowConnectModal(true);
       return;
     }
-    // Simulate private data unlock (in real app, this would involve decryption)
+    // In a real implementation, this would verify wallet ownership and decrypt data
+    // For now, we're just toggling the UI state
     setIsPrivateDataUnlocked(true);
+  };
+  
+  const handleDisconnectWallet = async () => {
+    try {
+      await disconnectWallet();
+    } catch (error) {
+      console.error('Failed to disconnect wallet:', error);
+    }
   };
 
   const handleLockPrivateData = () => {
     setIsPrivateDataUnlocked(false);
   };
+
+  const loadFiles = async () => {
+    setLoadingFiles(true);
+    try {
+      const response = await api.get('files');
+      if (!response.ok) {
+        throw new Error('Failed to fetch files');
+      }
+      const files = await response.json();
+      
+      // Transform files to match DataItem interface
+      const transformedFiles: DataItem[] = files.map((file: any) => ({
+        id: file.id,
+        name: file.file_name,
+        type: file.file_type === 'chemical/x-vcf' ? 'genetic' : 
+              file.file_type === 'text/csv' ? 'health' : 
+              file.file_type === 'application/pdf' ? 'professional' : 
+              'health',
+        date: new Date(file.created_at).toLocaleDateString(),
+        size: '100 MB', // TODO: Get actual size
+        accessCount: 0, // TODO: Get actual access count
+        nftCertified: !!file.nft_token_id,
+        isPrivate: !!file.encryption_key,
+        encrypted: !!file.encryption_key,
+      }));
+      
+      setUserData(transformedFiles);
+    } catch (error) {
+      console.error('Error loading files:', error);
+    } finally {
+      setLoadingFiles(false);
+    }
+  };
+
+  // Load files on mount
+  useEffect(() => {
+    loadFiles();
+  }, []);
+
+  const handleMintNFT = async (fileId: string) => {
+    if (!isWalletConnected) {
+      setShowConnectModal(true);
+      return;
+    }
+
+    setMintingFileId(fileId);
+    try {
+      const response = await fetch('/api/mint-nft-certificate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fileId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Failed to mint NFT: ${error.error}`);
+        return;
+      }
+
+      const result = await response.json();
+      
+      // Update local data
+      const updatedData = userData.map(item => 
+        item.id === fileId 
+          ? { ...item, nftCertified: true }
+          : item
+      );
+      
+      // Reload files and NFTs
+      await loadFiles();
+      alert('NFT Certificate minted successfully!');
+    } catch (error) {
+      console.error('Error minting NFT:', error);
+      alert('Failed to mint NFT certificate');
+    } finally {
+      setMintingFileId(null);
+    }
+  };
+
+  const loadNFTs = async () => {
+    setLoadingNFTs(true);
+    try {
+      // Load NFTs from user data (files with NFT certification)
+      const nftData = userData
+        .filter(item => item.nftCertified)
+        .map((item, index) => ({
+          id: item.id,
+          name: item.name,
+          type: item.type,
+          date: item.date,
+          tokenId: '0.0.7180736', // Real collection token ID
+          serialNumber: (index + 1).toString() // Serial number
+        }));
+      setNftCertificates(nftData);
+    } catch (error) {
+      console.error('Error loading NFTs:', error);
+    } finally {
+      setLoadingNFTs(false);
+    }
+  };
+
+  // Load NFTs when tab is clicked
+  useEffect(() => {
+    if (activeTab === 'nft') {
+      loadNFTs();
+    }
+  }, [activeTab]);
 
   const ConnectWalletModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -106,9 +226,14 @@ const AZGenesDashboard = () => {
             </svg>
           </div>
           <h3 className="text-xl font-bold text-gray-900 mb-2">Connect Your Wallet</h3>
-          <p className="text-gray-600 mb-6">
-            Connect your Hedera wallet to access private genetic data and manage your NFT certificates.
+          <p className="text-gray-600 mb-4">
+            Connect your Hedera wallet to access private genetic data. Wallet-based authentication enables secure, decentralized access control for your sensitive information.
           </p>
+          {accountId && (
+            <p className="text-sm text-indigo-600 mb-6 font-mono bg-indigo-50 px-3 py-2 rounded">
+              {accountId.toString()}
+            </p>
+          )}
           <div className="space-y-3">
             <button
               onClick={handleConnectWallet}
@@ -220,8 +345,12 @@ const AZGenesDashboard = () => {
             Certified
           </span>
         ) : (
-          <button className="text-indigo-600 hover:text-indigo-700 text-sm font-medium">
-            Get Certified
+          <button 
+            onClick={() => handleMintNFT(item.id)}
+            disabled={mintingFileId === item.id}
+            className="text-indigo-600 hover:text-indigo-700 text-sm font-medium disabled:opacity-50"
+          >
+            {mintingFileId === item.id ? 'Minting...' : 'Get Certified'}
           </button>
         )}
       </td>
@@ -315,7 +444,7 @@ const AZGenesDashboard = () => {
                     </span>
                   </div>
                   <button
-                    onClick={isWalletConnected ? () => setIsWalletConnected(false) : () => setShowConnectModal(true)}
+                    onClick={isWalletConnected ? handleDisconnectWallet : () => setShowConnectModal(true)}
                     className={`text-xs ${
                       isWalletConnected ? 'text-green-600 hover:text-green-700' : 'text-yellow-600 hover:text-yellow-700'
                     }`}
@@ -561,8 +690,103 @@ const AZGenesDashboard = () => {
 
             {activeTab === 'nft' && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">NFT Certificates</h2>
-                <p className="text-gray-600">NFT management interface coming soon...</p>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold text-gray-900">NFT Certificates</h2>
+                  {!isWalletConnected && (
+                    <button
+                      onClick={() => setShowConnectModal(true)}
+                      className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                    >
+                      Connect Wallet to Mint
+                    </button>
+                  )}
+                </div>
+
+                {loadingNFTs ? (
+                  <div className="flex justify-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+                  </div>
+                ) : nftCertificates.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">🎫</div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No NFT Certificates Yet</h3>
+                    <p className="text-gray-600 mb-6">Mint your first NFT certificate for your genetic data files</p>
+                    <button
+                      onClick={() => setActiveTab('data')}
+                      className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      Go to My Data
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {nftCertificates.map((nft) => (
+                      <div key={nft.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-2xl font-bold">
+                            🧬
+                          </div>
+                          <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">
+                            Certified
+                          </span>
+                        </div>
+                        <h3 className="font-semibold text-gray-900 mb-2">{nft.name}</h3>
+                        <div className="space-y-2 text-sm text-gray-600 mb-4">
+                          <div className="flex items-center">
+                            <span className="font-medium mr-2">Type:</span>
+                            <span className="capitalize">{nft.type}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <span className="font-medium mr-2">Date:</span>
+                            <span>{nft.date}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <span className="font-medium mr-2">Serial:</span>
+                            <span className="font-mono text-xs">{nft.serialNumber}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${nft.tokenId}:${nft.serialNumber}`);
+                            alert('Token ID copied!');
+                          }}
+                          className="w-full border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                        >
+                          Copy Token ID
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Show files that can be certified */}
+                {userData.filter(item => !item.nftCertified).length > 0 && (
+                  <div className="mt-8 pt-8 border-t border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Available to Certify</h3>
+                    <div className="space-y-3">
+                      {userData.filter(item => !item.nftCertified).map((item) => (
+                        <div key={item.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                          <div className="flex items-center space-x-4">
+                            <span className="text-2xl">
+                              {item.type === 'genetic' ? '🧬' : item.type === 'health' ? '🏥' : '📄'}
+                            </span>
+                            <div>
+                              <p className="font-medium text-gray-900">{item.name}</p>
+                              <p className="text-sm text-gray-600">{item.type} • {item.date}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleMintNFT(item.id)}
+                            disabled={mintingFileId === item.id}
+                            className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                          >
+                            {mintingFileId === item.id ? 'Minting...' : 'Mint NFT'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </main>

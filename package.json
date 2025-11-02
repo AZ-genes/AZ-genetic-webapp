@@ -9,7 +9,12 @@
     "test": "node scripts/test.mjs",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "generate:test-data": "node scripts/generateTestGeneticData.mjs",
+    "create-topic": "node scripts/createTopic.mjs",
+    "create-nft-collection": "node scripts/createNFTCollection.mjs",
+    "mint-test-nft": "node scripts/mintTestNFT.mjs",
+    "query-nft": "node scripts/queryNFT.mjs"
   },
   "dependencies": {
     "@hashgraph/sdk": "^2.76.0",
