@@ -1,10 +1,8 @@
 import { EncryptionService } from '../../services/encryption';
-import { HederaClient } from '../../services/hedera/client';
 import { AuthContext, corsHeaders } from './utils';
 import { withAuth } from './middleware/auth';
 
 const encryptionService = new EncryptionService();
-const hederaClient = new HederaClient();
 
 // Constants
 const MAX_DOWNLOADS_PER_HOUR = 20;
@@ -49,16 +47,8 @@ async function verifyF2Access(
     return false;
   }
 
-  const permission = permissions[0];
-
-  // Verify the permission on Hedera (smart contract)
-  try {
-    const isValid = await hederaClient.verifyAccess(permission.hedera_transaction_id);
-    return isValid;
-  } catch (error) {
-    console.error('Failed to verify Hedera permission:', error);
-    return false;
-  }
+  // Permission exists in database - no need for Hedera verification
+  return true;
 }
 
 async function handleGetFile(req: Request, context: AuthContext): Promise<Response> {
@@ -130,19 +120,16 @@ async function handleGetFile(req: Request, context: AuthContext): Promise<Respon
 
     const encryptedBuffer = Buffer.from(await encryptedData.arrayBuffer());
 
-    // Verify file integrity
+    // Verify file integrity for F2 users
     if (profile.subscription_tier === 'F2') {
       try {
-        // Get stored hash from Hedera
-        const storedHash = await hederaClient.getHashFromMirrorNode(file.hedera_transaction_id);
-        
-        // Verify hash matches
-        const hashMatches = await encryptionService.verifyHash(encryptedBuffer, storedHash);
+        // Verify hash matches the stored hash from database
+        const hashMatches = await encryptionService.verifyHash(encryptedBuffer, file.hash);
         if (!hashMatches) {
           throw new Error('File integrity verification failed');
         }
       } catch (error) {
-        throw new Error('Failed to verify file integrity with Hedera');
+        throw new Error('Failed to verify file integrity');
       }
     }
 

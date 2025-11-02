@@ -1,5 +1,3 @@
-import { ContractId } from '@hashgraph/sdk';
-import { HederaClient } from '../../services/hedera/client';
 import { FilePermission } from './types';
 import { AuthContext, corsHeaders } from './utils';
 import { withAuth } from './middleware/auth';
@@ -9,9 +7,6 @@ interface RevokeAccessRequest {
   granteeId: string;
   reason?: string;
 }
-
-const hederaClient = new HederaClient();
-const CONTRACT_ID = ContractId.fromString(process.env.HEDERA_CONTRACT_ID ?? '');
 
 async function notifyRevocation(
   supabase: AuthContext['supabase'],
@@ -99,10 +94,6 @@ async function handleRevokeAccess(req: Request, context: AuthContext): Promise<R
     throw new Error('User not authenticated');
   }
 
-  // Start a transaction
-  const { error: txError } = await context.supabase.rpc('begin_transaction');
-  if (txError) throw txError;
-
   try {
     // Get user profile
     const { data: profile, error: profileError } = await context.supabase
@@ -123,13 +114,6 @@ async function handleRevokeAccess(req: Request, context: AuthContext): Promise<R
     const file = await validateFileOwnership(context.supabase, body.fileId, profile.id);
     const permission = await validateActivePermission(context.supabase, body.fileId, body.granteeId);
 
-    // Record revocation on Hedera
-    const hederaTxId = await hederaClient.revokeAccess(
-      CONTRACT_ID,
-      body.fileId,
-      body.granteeId
-    );
-
     // Update permission status
     const { error: updateError } = await context.supabase
       .from('file_permissions')
@@ -138,7 +122,7 @@ async function handleRevokeAccess(req: Request, context: AuthContext): Promise<R
         revoked_at: new Date().toISOString(),
         revoked_by: profile.id,
         revocation_reason: body.reason || null,
-        revocation_transaction_id: hederaTxId
+        revocation_transaction_id: `mock-tx-${Date.now()}` // Mock for now - can add Hedera later
       })
       .eq('id', permission.id);
 
@@ -155,12 +139,9 @@ async function handleRevokeAccess(req: Request, context: AuthContext): Promise<R
       metadata: {
         reason: body.reason,
         permission_id: permission.id,
-        hedera_transaction_id: hederaTxId
+        revocation_transaction_id: `mock-tx-${Date.now()}`
       }
     });
-
-    // Commit transaction
-    await context.supabase.rpc('commit_transaction');
 
     // Notify user of revocation (non-blocking)
     notifyRevocation(
@@ -172,17 +153,13 @@ async function handleRevokeAccess(req: Request, context: AuthContext): Promise<R
     ).catch(console.error);
 
     return new Response(JSON.stringify({
-      message: 'Access revoked successfully',
-      transactionId: hederaTxId
+      message: 'Access revoked successfully'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200
     });
 
   } catch (error) {
-    // Rollback transaction
-    await context.supabase.rpc('rollback_transaction');
-
     // Log the error
     try {
       await context.supabase.from('error_logs').insert({

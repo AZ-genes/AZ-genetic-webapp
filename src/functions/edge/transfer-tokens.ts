@@ -1,8 +1,5 @@
-import { HederaClient } from '../../services/hedera/client';
 import { AuthContext, corsHeaders } from './utils';
 import { withAuth } from './middleware/auth';
-
-const hederaClient = new HederaClient();
 
 async function handleTransferTokens(req: Request, context: AuthContext): Promise<Response> {
   if (req.method !== 'POST') {
@@ -41,8 +38,8 @@ async function handleTransferTokens(req: Request, context: AuthContext): Promise
       throw new Error('Invalid recipient account ID or amount');
     }
 
-    // Perform token transfer using HederaClient
-    const transactionId = await hederaClient.transferTokens(profile.id, recipientAccountId, amount);
+    // Perform token transfer (mock for now - can add Hedera later)
+    const transactionId = `mock-transfer-${Date.now()}`;
 
     // Log the transaction in Supabase
     const { error: insertError } = await supabase

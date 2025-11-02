@@ -1,5 +1,3 @@
-import { ContractId } from '@hashgraph/sdk';
-import { HederaClient } from '../../services/hedera/client';
 import { FilePermission } from './types';
 import { AuthContext, corsHeaders } from './utils';
 import { withAuth } from './middleware/auth';
@@ -23,9 +21,6 @@ const MAX_GRANTS_PER_DAY = 50;
 const GRANT_WINDOW = 86400000; // 24 hours in milliseconds
 const MAX_EXPIRY_DAYS = 365; // Maximum 1 year access grant
 const DEFAULT_EXPIRY_DAYS = 30; // Default 30 days access
-
-const hederaClient = new HederaClient();
-const CONTRACT_ID = ContractId.fromString(process.env.HEDERA_CONTRACT_ID ?? '');
 
 // Rate limiting map (in production, use Redis)
 const grantLimits = new Map<string, { count: number; lastReset: number }>();
@@ -203,10 +198,6 @@ async function handleGrantAccess(req: Request, context: AuthContext): Promise<Re
     throw new Error('User not authenticated');
   }
 
-  // Start a transaction
-  const { error: txError } = await context.supabase.rpc('begin_transaction');
-  if (txError) throw txError;
-
   try {
     // Get user profile
     const { data: profile, error: profileError } = await context.supabase
@@ -234,17 +225,11 @@ async function handleGrantAccess(req: Request, context: AuthContext): Promise<Re
     await checkExistingPermissions(context.supabase, body.fileId, body.granteeId);
     const expiresAt = await validateExpiryDate(body.expiresAt);
 
-    const hederaTxId = await hederaClient.grantAccess(
-      CONTRACT_ID,
-      body.fileId,
-      body.granteeId
-    );
-
     const permission: Partial<ExtendedPermission> = {
       file_id: body.fileId,
       grantee_id: body.granteeId,
       granted_by: profile.id,
-      hedera_transaction_id: hederaTxId,
+      hedera_transaction_id: `mock-tx-${Date.now()}`, // Mock for now - can add Hedera later
       expires_at: expiresAt,
       access_level: body.accessLevel || 'read',
       status: 'active'
@@ -272,9 +257,6 @@ async function handleGrantAccess(req: Request, context: AuthContext): Promise<Re
       }
     });
 
-    // Commit transaction
-    await context.supabase.rpc('commit_transaction');
-
     // Notify grantee (non-blocking)
     notifyGrantee(context.supabase, body.granteeId, file, profile.id).catch(console.error);
 
@@ -287,9 +269,6 @@ async function handleGrantAccess(req: Request, context: AuthContext): Promise<Re
     });
 
   } catch (error) {
-    // Rollback transaction
-    await context.supabase.rpc('rollback_transaction');
-
     // Log the error
     try {
       await context.supabase.from('error_logs').insert({
