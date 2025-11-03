@@ -114,19 +114,30 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
     }
     
     try {
+      console.log('Opening wallet connection modal...');
+      console.log('Connector methods:', Object.keys(dAppConnector));
+      console.log('Active session before:', (dAppConnector as any).activeSession);
+      
       await (dAppConnector as any).openModal();
       console.log('Modal opened, waiting for user to connect...');
       
-      // Poll for session changes
-      const maxPolls = 30;
+      // Poll for session changes - increased poll count and shorter interval
+      const maxPolls = 60;
       let pollCount = 0;
       const pollInterval = setInterval(() => {
         pollCount++;
-        if ((dAppConnector as any).activeSession) {
+        const activeSession = (dAppConnector as any).activeSession;
+        console.log(`Poll ${pollCount}/${maxPolls}: activeSession =`, activeSession);
+        
+        if (activeSession) {
           clearInterval(pollInterval);
-          const { topic, peer } = (dAppConnector as any).activeSession;
+          console.log('Active session detected!', activeSession);
+          const { topic, peer } = activeSession;
+          console.log('Session peer:', peer);
           const chainId = peer.namespaces.hedera?.chains?.[0] as HederaChainId;
           const accounts = peer.namespaces.hedera?.accounts || [];
+          console.log('Chain ID:', chainId, 'Accounts:', accounts);
+          
           if (accounts.length > 0 && chainId) {
             const connectedAccountId = AccountId.fromString(accounts[0].split(':')[2]);
             const connectedNetwork =
@@ -139,13 +150,13 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
             setAccountId(connectedAccountId);
             setNetwork(connectedNetwork);
             setClient((Client as any).forLedgerId(connectedNetwork).setWallet(dAppConnector));
-            console.log('Wallet connected:', connectedAccountId.toString());
+            console.log('✓ Wallet connected:', connectedAccountId.toString());
           }
         } else if (pollCount >= maxPolls) {
           clearInterval(pollInterval);
           console.log('Timeout waiting for wallet connection');
         }
-      }, 1000);
+      }, 500); // Check every 500ms instead of 1s
     } catch (error) {
       console.error('Failed to connect wallet:', error);
     }
