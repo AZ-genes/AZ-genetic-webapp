@@ -6,6 +6,7 @@ import React, {
   useEffect,
   ReactNode,
   useCallback,
+  useRef,
 } from 'react';
 import {
   DAppConnector,
@@ -52,39 +53,29 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
   const [network, setNetwork] = useState<LedgerId | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Only initialize on client side to avoid hydration mismatch
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // Create a reusable session handler
+  // Create a reusable session handler that reads from signers
   const handleSessionUpdate = useCallback((connector: DAppConnector) => {
-    const session = (connector as any).activeSession; // <-- Get the session from the connector
-    
-    if (session) {
-      console.log('Wallet session established/updated:', session);
-      const { peer } = session;
-      const chainId = peer.namespaces.hedera?.chains?.[0] as HederaChainId;
-      const accounts = peer.namespaces.hedera?.accounts || [];
+    // Use signers array which is the official way to detect connections
+    if (connector.signers && connector.signers.length > 0) {
+      const signer = connector.signers[0];
+      const connectedAccountId = signer.getAccountId();
+      const connectedNetwork = signer.getLedgerId();
       
-      if (accounts.length > 0 && chainId) {
-        const connectedAccountId = AccountId.fromString(accounts[0].split(':')[2]);
-        const connectedNetwork =
-          chainId === HederaChainId.Mainnet
-            ? LedgerId.MAINNET
-            : chainId === HederaChainId.Testnet
-            ? LedgerId.TESTNET
-            : LedgerId.PREVIEWNET;
-        
-        setIsConnected(true);
-        setAccountId(connectedAccountId);
-        setNetwork(connectedNetwork);
-        setClient((Client as any).forLedgerId(connectedNetwork).setWallet(connector));
-        console.log('✓ Wallet state updated from event listener.');
-      }
+      console.log('Wallet connected:', connectedAccountId.toString());
+      setIsConnected(true);
+      setAccountId(connectedAccountId);
+      setNetwork(connectedNetwork);
+      setClient((Client as any).forLedgerId(connectedNetwork).setWallet(connector));
+      console.log('✓ Wallet state updated from signers.');
     } else {
-      console.log('handleSessionUpdate called, but no active session found.');
+      console.log('handleSessionUpdate called, but no signers found.');
     }
   }, []);
 
@@ -110,29 +101,9 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
         await connector.init({ logger: 'error' });
         setDAppConnector(connector);
 
-        // --- THIS IS THE FIX ---
-        // All listeners now call the handler with *only* the connector.
-        // The handler will read the .activeSession itself.
-        
-        (connector as any).on('session_connect', () => {
-          console.log('EVENT: session_connect fired');
-          handleSessionUpdate(connector); 
-        });
-
-        (connector as any).on('session_update', () => {
-          console.log('EVENT: session_update fired');
-          handleSessionUpdate(connector);
-        });
-        
-        (connector as any).on(HederaSessionEvent.AccountsChanged, () => {
-          console.log('EVENT: AccountsChanged fired');
-          handleSessionUpdate(connector);
-        });
-        // --- END FIX ---
-
-        // Check for existing session
-        if ((connector as any).activeSession) {
-          console.log('Found active session on init');
+        // Check for existing session on page load
+        if (connector.signers && connector.signers.length > 0) {
+          console.log('Found existing session on init');
           handleSessionUpdate(connector);
         }
       } catch (error) {
@@ -151,20 +122,48 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
     
     try {
       console.log('Opening wallet connection modal...');
-      await (dAppConnector as any).openModal();
-      console.log('Modal opened, waiting for user to connect via event listener...');
-      // The event listeners will now manage the connection state
+      const session = await dAppConnector.openModal();
+      console.log('Modal opened, session returned:', session);
+      
+      // Poll for signers to appear after modal approval
+      const maxPolls = 60;
+      let pollCount = 0;
+      pollingIntervalRef.current = setInterval(() => {
+        pollCount++;
+        if (dAppConnector.signers && dAppConnector.signers.length > 0) {
+          clearInterval(pollingIntervalRef.current!);
+          pollingIntervalRef.current = null;
+          console.log('Signers detected!');
+          handleSessionUpdate(dAppConnector);
+        } else if (pollCount >= maxPolls) {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+          }
+          pollingIntervalRef.current = null;
+          console.log('Timeout waiting for wallet connection');
+        }
+      }, 500);
     } catch (error) {
       console.error('Failed to open wallet modal:', error);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
     }
-  }, [dAppConnector]);
+  }, [dAppConnector, handleSessionUpdate]);
 
   const disconnectWallet = useCallback(async () => {
+    // Clear polling if active
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    
     if (dAppConnector) {
       try {
-        await (dAppConnector as any).killSession();
+        await dAppConnector.disconnectAll();
       } catch (error) {
-        console.error('Error killing session:', error);
+        console.error('Error disconnecting wallet:', error);
       }
     }
     setIsConnected(false);
@@ -172,6 +171,15 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
     setNetwork(null);
     setClient(null);
   }, [dAppConnector]);
+  
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
 
   return (
     <HederaWalletContext.Provider
