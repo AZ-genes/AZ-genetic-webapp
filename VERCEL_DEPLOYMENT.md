@@ -91,7 +91,25 @@ vercel
 vercel --prod
 ```
 
-### 3. Run Database Migrations
+### 3. Configure Firebase OAuth Redirect Domain
+
+After deployment, you need to allowlist your Vercel domain in Firebase:
+
+1. Go to [Firebase Console](https://console.firebase.google.com)
+2. Select your project (az-genes-1ca88)
+3. Navigate to **Authentication** > **Settings** > **Authorized domains**
+4. Click **Add domain**
+5. Add your Vercel deployment domain (e.g., `your-project.vercel.app`)
+6. Add any custom domains you plan to use
+
+**Example domains to add:**
+- `your-project.vercel.app` (default Vercel preview/production URL)
+- `yourproject.vercel.app` (if using vercel.app without dashes)
+- Any custom domain you configure in Vercel
+
+This is required for Firebase Auth to work properly with magic link authentication.
+
+### 4. Run Database Migrations
 
 After deployment, you need to run the SQL migrations on your Supabase project:
 
@@ -106,7 +124,7 @@ After deployment, you need to run the SQL migrations on your Supabase project:
    - `migrations/00006_add_user_profile_name_email.sql`
    - `migrations/00007_add_pending_status_to_file_permissions.sql`
 
-### 4. Configure Domain (Optional)
+### 5. Configure Domain (Optional)
 
 1. Go to your Vercel project settings
 2. Click on "Domains"
@@ -141,6 +159,8 @@ After deployment, you need to run the SQL migrations on your Supabase project:
 
 ### Authentication Issues
 - Verify Firebase configuration
+- Check Firebase Authorized domains are configured correctly
+- Add your Vercel domain to Firebase Authorized domains
 - Check Supabase auth configuration
 - Verify CORS settings
 
