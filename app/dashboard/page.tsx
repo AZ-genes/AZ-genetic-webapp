@@ -277,6 +277,12 @@ const AZGenesDashboard = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Ensure user is authenticated before attempting upload
+    if (!user) {
+      toast.error('Please sign in to upload files');
+      return;
+    }
+
     setIsUploading(true);
     try {
       const formData = new FormData();
