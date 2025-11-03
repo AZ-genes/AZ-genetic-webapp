@@ -59,7 +59,9 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   // Create a reusable session handler
-  const handleSessionUpdate = useCallback((connector: DAppConnector, session: any) => {
+  const handleSessionUpdate = useCallback((connector: DAppConnector) => {
+    const session = (connector as any).activeSession; // <-- Get the session from the connector
+    
     if (session) {
       console.log('Wallet session established/updated:', session);
       const { peer } = session;
@@ -81,6 +83,8 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
         setClient((Client as any).forLedgerId(connectedNetwork).setWallet(connector));
         console.log('✓ Wallet state updated from event listener.');
       }
+    } else {
+      console.log('handleSessionUpdate called, but no active session found.');
     }
   }, []);
 
@@ -106,34 +110,30 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
         await connector.init({ logger: 'error' });
         setDAppConnector(connector);
 
-        // --- START FIX: Add session_connect listener ---
+        // --- THIS IS THE FIX ---
+        // All listeners now call the handler with *only* the connector.
+        // The handler will read the .activeSession itself.
         
-        // This is the key event that fires on successful new connection
-        (connector as any).on('session_connect', (session: any) => {
-          console.log('EVENT: session_connect fired', session);
-          handleSessionUpdate(connector, (connector as any).activeSession || session);
+        (connector as any).on('session_connect', () => {
+          console.log('EVENT: session_connect fired');
+          handleSessionUpdate(connector); 
         });
 
-        // This event fires when the session is updated (e.g., chain change)
-        (connector as any).on('session_update', (session: any) => {
-          console.log('EVENT: session_update fired', session);
-          handleSessionUpdate(connector, (connector as any).activeSession || session);
+        (connector as any).on('session_update', () => {
+          console.log('EVENT: session_update fired');
+          handleSessionUpdate(connector);
         });
         
-        // This event fires when accounts change
-        (connector as any).on(
-          HederaSessionEvent.AccountsChanged,
-          (session: any) => {
-            console.log('EVENT: AccountsChanged fired', session);
-            handleSessionUpdate(connector, session);
-          }
-        );
+        (connector as any).on(HederaSessionEvent.AccountsChanged, () => {
+          console.log('EVENT: AccountsChanged fired');
+          handleSessionUpdate(connector);
+        });
         // --- END FIX ---
 
         // Check for existing session
         if ((connector as any).activeSession) {
           console.log('Found active session on init');
-          handleSessionUpdate(connector, (connector as any).activeSession);
+          handleSessionUpdate(connector);
         }
       } catch (error) {
         console.error('Failed to initialize wallet connector:', error);

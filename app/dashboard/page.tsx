@@ -56,6 +56,7 @@ const AZGenesDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isPrivateDataUnlocked, setIsPrivateDataUnlocked] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [userData, setUserData] = useState<DataItem[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -328,15 +329,16 @@ const AZGenesDashboard = () => {
   };
 
   const handleConnectWallet = async () => {
+    setIsConnecting(true); // <-- ADD THIS
     try {
       await connectWallet();
-      // Note: The wallet connection state will update via the context
-      // We'll show a success message when the connection is established
-      // The modal will close automatically if connection is successful
+      // The modal will open. The event listener will handle success.
+      // We'll set connecting back to false if the user connects OR closes the modal.
     } catch (error) {
       console.error('Error connecting wallet:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to connect wallet';
       toast.error(errorMessage.includes('project ID') ? 'Wallet Connect not configured. Please set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID' : 'Failed to connect wallet');
+      setIsConnecting(false); // <-- ADD THIS on error
     }
   };
   
@@ -344,7 +346,8 @@ const AZGenesDashboard = () => {
   useEffect(() => {
     if (isWalletConnected && accountId) {
       toast.success('Wallet connected successfully!');
-    setShowConnectModal(false);
+      setShowConnectModal(false);
+      setIsConnecting(false); // <-- ADD THIS
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWalletConnected, accountId]);
@@ -484,24 +487,37 @@ const AZGenesDashboard = () => {
       <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
         <div className="text-center">
           <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+            {isConnecting ? (
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            ) : (
+              <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            )}
           </div>
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Connect Your Wallet</h3>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            {isConnecting ? 'Connecting...' : 'Connect Your Wallet'}
+          </h3>
           <p className="text-gray-600 mb-6">
-            Connect your Hedera wallet to access private genetic data and manage your NFT certificates.
+            {isConnecting
+              ? 'Please approve the connection in your Hedera wallet.'
+              : 'Connect your Hedera wallet to access private genetic data and manage your NFT certificates.'}
           </p>
           <div className="space-y-3">
             <button
               onClick={handleConnectWallet}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+              disabled={isConnecting}
+              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
             >
-              Connect Hedera Wallet
+              {isConnecting ? 'Waiting for Approval...' : 'Connect Hedera Wallet'}
             </button>
             <button
-              onClick={() => setShowConnectModal(false)}
-              className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+              onClick={() => {
+                setShowConnectModal(false);
+                setIsConnecting(false); // <-- ADD THIS
+              }}
+              disabled={isConnecting}
+              className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>

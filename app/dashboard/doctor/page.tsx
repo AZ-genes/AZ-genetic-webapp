@@ -49,6 +49,7 @@ const AZGenesDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isPrivateDataUnlocked, setIsPrivateDataUnlocked] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [nftCertificates, setNftCertificates] = useState<any[]>([]);
   const [loadingNFTs, setLoadingNFTs] = useState(false);
   const [mintingFileId, setMintingFileId] = useState<string | null>(null);
@@ -95,11 +96,14 @@ const AZGenesDashboard = () => {
   };
 
   const handleConnectWallet = async () => {
+    setIsConnecting(true);
     try {
       await connectWallet();
-    setShowConnectModal(false);
+      setShowConnectModal(false);
+      setIsConnecting(false);
     } catch (error) {
       console.error('Failed to connect wallet:', error);
+      setIsConnecting(false);
     }
   };
 
@@ -283,13 +287,21 @@ const AZGenesDashboard = () => {
       <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
         <div className="text-center">
           <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+            {isConnecting ? (
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            ) : (
+              <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            )}
           </div>
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Connect Your Wallet</h3>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            {isConnecting ? 'Connecting...' : 'Connect Your Wallet'}
+          </h3>
           <p className="text-gray-600 mb-4">
-            Connect your Hedera wallet to access private genetic data. Wallet-based authentication enables secure, decentralized access control for your sensitive information.
+            {isConnecting
+              ? 'Please approve the connection in your Hedera wallet.'
+              : 'Connect your Hedera wallet to access private genetic data. Wallet-based authentication enables secure, decentralized access control for your sensitive information.'}
           </p>
           {accountId && (
             <p className="text-sm text-indigo-600 mb-6 font-mono bg-indigo-50 px-3 py-2 rounded">
@@ -299,13 +311,18 @@ const AZGenesDashboard = () => {
           <div className="space-y-3">
             <button
               onClick={handleConnectWallet}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+              disabled={isConnecting}
+              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
             >
-              Connect Hedera Wallet
+              {isConnecting ? 'Waiting for Approval...' : 'Connect Hedera Wallet'}
             </button>
             <button
-              onClick={() => setShowConnectModal(false)}
-              className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+              onClick={() => {
+                setShowConnectModal(false);
+                setIsConnecting(false);
+              }}
+              disabled={isConnecting}
+              className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
