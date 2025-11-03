@@ -54,24 +54,32 @@ export async function withAuth(
       } else {
         // Try Firebase Admin verification first (since that's what's configured)
         try {
+          console.log('[Auth] Attempting Firebase Admin verification...');
           const decodedToken = await adminAuth.verifyIdToken(token);
+          console.log('[Auth] Firebase Admin verified:', decodedToken.uid);
           context.user = {
             id: decodedToken.uid,
             email: decodedToken.email,
             uid: decodedToken.uid
           };
         } catch (firebaseError) {
+          console.error('[Auth] Firebase Admin verification failed:', firebaseError instanceof Error ? firebaseError.message : firebaseError);
           // Fallback to Supabase auth if Firebase verification fails
           if (context.supabase) {
+            console.log('[Auth] Falling back to Supabase auth...');
             const { data: { user }, error: userError } = await context.supabase.auth.getUser(token);
             if (userError) {
+              console.error('[Auth] Supabase auth error:', userError.message);
               throw new Error(`Token validation failed: ${userError.message}`);
             }
             if (!user) {
+              console.error('[Auth] Supabase auth: No user found');
               throw new Error('Token validation failed: No user found');
             }
+            console.log('[Auth] Supabase auth verified:', user.id);
             context.user = user;
           } else {
+            console.error('[Auth] No authentication provider configured');
             throw new Error('No authentication provider configured');
           }
         }
