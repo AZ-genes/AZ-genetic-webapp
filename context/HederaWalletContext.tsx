@@ -125,24 +125,31 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
       const session = await dAppConnector.openModal();
       console.log('Modal opened, session returned:', session);
       
-      // Poll for signers to appear after modal approval
-      const maxPolls = 60;
-      let pollCount = 0;
-      pollingIntervalRef.current = setInterval(() => {
-        pollCount++;
-        if (dAppConnector.signers && dAppConnector.signers.length > 0) {
-          clearInterval(pollingIntervalRef.current!);
-          pollingIntervalRef.current = null;
-          console.log('Signers detected!');
-          handleSessionUpdate(dAppConnector);
-        } else if (pollCount >= maxPolls) {
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
+      // Check immediately if signers are already available
+      if (dAppConnector.signers && dAppConnector.signers.length > 0) {
+        console.log('Signers immediately available after openModal');
+        handleSessionUpdate(dAppConnector);
+      } else {
+        // Poll for signers to appear after modal approval (fallback)
+        console.log('No signers yet, polling for connection...');
+        const maxPolls = 30; // Reduced from 60 for faster timeout
+        let pollCount = 0;
+        pollingIntervalRef.current = setInterval(() => {
+          pollCount++;
+          if (dAppConnector.signers && dAppConnector.signers.length > 0) {
+            clearInterval(pollingIntervalRef.current!);
+            pollingIntervalRef.current = null;
+            console.log('Signers detected!');
+            handleSessionUpdate(dAppConnector);
+          } else if (pollCount >= maxPolls) {
+            if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+            }
+            pollingIntervalRef.current = null;
+            console.log('Timeout waiting for wallet connection');
           }
-          pollingIntervalRef.current = null;
-          console.log('Timeout waiting for wallet connection');
-        }
-      }, 500);
+        }, 500);
+      }
     } catch (error) {
       console.error('Failed to open wallet modal:', error);
       if (pollingIntervalRef.current) {
