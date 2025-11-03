@@ -18,13 +18,14 @@ export default function AuthCallback() {
                     if (email) {
                         await signInWithEmailLink(auth, email, window.location.href);
                         const userName = window.localStorage.getItem('userNameForSignIn');
+                        const isSignUp = !!userName;
                         window.localStorage.removeItem('emailForSignIn');
                         window.localStorage.removeItem('userNameForSignIn');
                         
                         // Ensure profile exists (with or without name for sign-up)
                         try {
                             const token = await auth.currentUser?.getIdToken();
-                            await fetch('/api/get-profile', {
+                            const response = await fetch('/api/get-profile', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
@@ -32,8 +33,18 @@ export default function AuthCallback() {
                                 },
                                 body: userName ? JSON.stringify({ name: userName }) : '{}'
                             });
+                            
+                            // Check if this is a new user or existing user logging in
+                            if (response.status === 201) {
+                                // New profile created (sign up)
+                                window.localStorage.setItem('showWelcomeMessage', 'true');
+                            } else {
+                                // Existing profile (login)
+                                window.localStorage.setItem('showLoginSuccessMessage', 'true');
+                            }
                         } catch (err) {
                             console.error('Failed to create profile:', err);
+                            window.localStorage.setItem('showLoginSuccessMessage', 'true');
                         }
                         
                         router.push('/dashboard');

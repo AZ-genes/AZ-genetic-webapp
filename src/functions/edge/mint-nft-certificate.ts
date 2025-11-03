@@ -158,5 +158,7 @@ async function handleMintNFTCertificate(req: Request, context: AuthContext): Pro
   }
 }
 
-export const onRequest = withAuth(handleMintNFTCertificate);
+// Export the handler with auth middleware
+export const onRequest = (req: Request, context: AuthContext) =>
+  withAuth(req, context, handleMintNFTCertificate);
 

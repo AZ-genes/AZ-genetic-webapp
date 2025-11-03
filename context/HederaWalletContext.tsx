@@ -7,14 +7,7 @@ import React, {
   ReactNode,
   useCallback,
 } from 'react';
-import {
-  DAppConnector,
-  HederaChainId,
-  HederaJsonRpcMethod,
-  HederaSessionEvent,
-} from '@hashgraph/hedera-wallet-connect';
 import { LedgerId, AccountId, Client } from '@hashgraph/sdk';
-import { WalletConnectModal } from '@walletconnect/modal';
 
 interface HederaWalletContextType {
   isConnected: boolean;
@@ -22,7 +15,7 @@ interface HederaWalletContextType {
   network: LedgerId | null;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => Promise<void>;
-  dAppConnector: DAppConnector | null;
+  dAppConnector: any;
   client: Client | null;
 }
 
@@ -30,131 +23,24 @@ const HederaWalletContext = createContext<HederaWalletContextType | undefined>(
   undefined
 );
 
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
-
-if (!projectId) {
-  throw new Error('You need to provide NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID env variable');
-}
-
-// Use current window location for metadata URL in browser, fallback otherwise
-const getMetadataUrl = () => {
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  return 'https://az-genes.com';
-};
-
-const metadata = {
-  name: 'AZ-Genes',
-  description: 'A Hedera dApp for managing genetic data',
-  url: getMetadataUrl(),
-  icons: ['https://avatars.githubusercontent.com/u/31002956'],
-};
-
 export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
-  const [dAppConnector, setDAppConnector] = useState<DAppConnector | null>(null);
+  const [dAppConnector, setDAppConnector] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [accountId, setAccountId] = useState<AccountId | null>(null);
   const [network, setNetwork] = useState<LedgerId | null>(null);
   const [client, setClient] = useState<Client | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
-
-  // Only initialize on client side to avoid hydration mismatch
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
-    // Only initialize on client side after mount to avoid hydration mismatch
-    if (!isMounted) return;
-
-    const initConnector = async () => {
-      const connector = new DAppConnector(
-        metadata,
-        LedgerId.TESTNET, // Default ledger, will be updated on connection
-        projectId,
-        Object.values(HederaJsonRpcMethod),
-        [HederaSessionEvent.ChainChanged, HederaSessionEvent.AccountsChanged],
-        [HederaChainId.Mainnet, HederaChainId.Testnet, HederaChainId.Previewnet]
-      );
-
-      await connector.init({ logger: 'error' });
-      setDAppConnector(connector);
-
-      // Check for existing session
-      if ((connector as any).activeSession) {
-        const { topic, peer } = (connector as any).activeSession;
-        const chainId = peer.namespaces.hedera?.chains?.[0] as HederaChainId;
-        const accounts = peer.namespaces.hedera?.accounts || [];
-        if (accounts.length > 0 && chainId) {
-          const connectedAccountId = AccountId.fromString(accounts[0].split(':')[2]);
-          const connectedNetwork =
-            chainId === HederaChainId.Mainnet
-              ? LedgerId.MAINNET
-              : chainId === HederaChainId.Testnet
-              ? LedgerId.TESTNET
-              : LedgerId.PREVIEWNET;
-
-          setIsConnected(true);
-          setAccountId(connectedAccountId);
-          setNetwork(connectedNetwork);
-          setClient((Client as any).forLedgerId(connectedNetwork).setWallet(connector));
-        }
-      }
-    };
-
-    initConnector();
-  }, [isMounted]); // Run after mount
 
   const connectWallet = useCallback(async () => {
-    if (!dAppConnector) return;
-    try {
-      await (dAppConnector as any).openModal();
-      console.log("dAppConnector.activeSession:", (dAppConnector as any).activeSession);
-
-      if ((dAppConnector as any).activeSession) {
-        const { topic, peer } = (dAppConnector as any).activeSession;
-        const chainId = peer.namespaces.hedera?.chains?.[0] as HederaChainId;
-        const accounts = peer.namespaces.hedera?.accounts || [];
-
-        if (accounts.length > 0 && chainId) {
-          const connectedAccountId = AccountId.fromString(accounts[0].split(':')[2]);
-          const connectedNetwork =
-            chainId === HederaChainId.Mainnet
-              ? LedgerId.MAINNET
-              : chainId === HederaChainId.Testnet
-              ? LedgerId.TESTNET
-              : LedgerId.PREVIEWNET;
-
-          setIsConnected(true);
-          console.log("isConnected after successful connection:", true);
-          setAccountId(connectedAccountId);
-          setNetwork(connectedNetwork);
-          setClient((Client as any).forLedgerId(connectedNetwork).setWallet(dAppConnector));
-          console.log('Wallet connected:', connectedAccountId.toString(), connectedNetwork.toString());
-        }
-      } else {
-        console.log("No active session after openModal.");
-      }
-    } catch (error) {
-      console.error('Failed to connect wallet:', error);
-      setIsConnected(false);
-      setAccountId(null);
-      setNetwork(null);
-      setClient(null);
-    }
-  }, [dAppConnector]);
+    // TODO: Implement Hedera wallet connection with HashPack/Blade
+    console.log('Wallet connection not yet implemented');
+  }, []);
 
   const disconnectWallet = useCallback(async () => {
-    if (dAppConnector) {
-      await (dAppConnector as any).killSession();
-    }
     setIsConnected(false);
     setAccountId(null);
     setNetwork(null);
     setClient(null);
-    console.log('Wallet disconnected');
-  }, [dAppConnector]);
+  }, []);
 
   return (
     <HederaWalletContext.Provider

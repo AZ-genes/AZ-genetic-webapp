@@ -99,4 +99,19 @@ export async function withAuth(
         }
       );
     }
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error('Unexpected auth error:', error.message);
+    
+    return new Response(
+      JSON.stringify({ 
+        error: error.message,
+        code: 'UNEXPECTED_ERROR'
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
 }

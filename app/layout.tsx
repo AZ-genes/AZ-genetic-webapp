@@ -1,5 +1,4 @@
-﻿import { HederaWalletProvider } from "../context/HederaWalletContext";
-import { ToastProvider } from "../context/ToastContext";
+﻿import { Providers } from "../context/Providers";
 import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
 import "./globals.css";
@@ -27,11 +26,9 @@ export default function RootLayout({
         className={`${montserrat.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
-        <HederaWalletProvider>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
-        </HederaWalletProvider>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );
