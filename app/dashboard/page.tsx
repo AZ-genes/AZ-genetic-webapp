@@ -626,6 +626,13 @@ const AZGenesDashboard = () => {
     </tr>
   );
 
+  // Redirect to sign-in if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/sign-in');
+    }
+  }, [authLoading, user, router]);
+
   // Show loading spinner while auth is loading
   if (authLoading) {
   return (
@@ -642,6 +649,11 @@ const AZGenesDashboard = () => {
         </div>
       </>
     );
+  }
+
+  // Don't render anything if user is not authenticated (will redirect)
+  if (!user) {
+    return null;
   }
 
   return (

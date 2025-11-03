@@ -18,9 +18,11 @@ export default function AuthCallback() {
                     if (email) {
                         await signInWithEmailLink(auth, email, window.location.href);
                         const userName = window.localStorage.getItem('userNameForSignIn');
+                        const userRole = window.localStorage.getItem('userRoleForSignIn') || 'patient';
                         const isSignUp = !!userName;
                         window.localStorage.removeItem('emailForSignIn');
                         window.localStorage.removeItem('userNameForSignIn');
+                        window.localStorage.removeItem('userRoleForSignIn');
                         
                         // Ensure profile exists (with or without name for sign-up)
                         try {
@@ -31,7 +33,7 @@ export default function AuthCallback() {
                                     'Content-Type': 'application/json',
                                     'Authorization': `Bearer ${token}`
                                 },
-                                body: userName ? JSON.stringify({ name: userName }) : '{}'
+                                body: userName ? JSON.stringify({ name: userName, user_role: userRole }) : '{}'
                             });
                             
                             // Check if this is a new user or existing user logging in

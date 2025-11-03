@@ -6,6 +6,7 @@ import { sendSignInLinkToEmail } from "firebase/auth";
 const SignUp: React.FC = () => {
     const [email, setEmail] = useState("");
     const [name, setName] = useState("");
+    const [userRole, setUserRole] = useState<'patient' | 'doctor' | 'researcher'>('patient');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
@@ -26,6 +27,8 @@ const SignUp: React.FC = () => {
             if (name.trim()) {
                 window.localStorage.setItem('userNameForSignIn', name.trim());
             }
+            // Store selected role for later use in profile creation
+            window.localStorage.setItem('userRoleForSignIn', userRole);
             setMessage("Check your email for the magic link!");
         } catch (err: any) {
             setError(err.message);
@@ -62,6 +65,19 @@ const SignUp: React.FC = () => {
                             autoComplete="email"
                             placeholder="Enter your email"
                         />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">I am a</label>
+                        <select
+                            className="w-full px-4 py-2 border text-gray-600 outline-none rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            value={userRole}
+                            onChange={e => setUserRole(e.target.value as 'patient' | 'doctor' | 'researcher')}
+                            required
+                        >
+                            <option value="patient">Patient</option>
+                            <option value="doctor">Doctor</option>
+                            <option value="researcher">Researcher</option>
+                        </select>
                     </div>
                     
                     {error && (

@@ -36,11 +36,13 @@ export async function onRequest(req: Request, context: AuthContext): Promise<Res
         .single();
 
       if (!existingProfile) {
-        // Get name from request body if provided (from sign-up)
+        // Get name and user_role from request body if provided (from sign-up)
         let profileName = null;
+        let userRole = 'patient'; // default role
         try {
           const body = await req.json().catch(() => ({}));
           profileName = body.name || null;
+          userRole = body.user_role || 'patient';
         } catch {
           // Request body might not be available or already consumed
         }
@@ -49,6 +51,7 @@ export async function onRequest(req: Request, context: AuthContext): Promise<Res
           auth_id: user.id,
           subscription_tier: 'F1',
           email: user.email || null,
+          user_role: userRole,
         };
         
         if (profileName) {

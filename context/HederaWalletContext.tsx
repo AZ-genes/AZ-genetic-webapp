@@ -106,42 +106,33 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
         await connector.init({ logger: 'error' });
         setDAppConnector(connector);
 
-        // Get the walletConnectClient to attach event listeners
-        const walletConnectClient = (connector as any).walletConnectClient;
-        if (walletConnectClient && typeof walletConnectClient.on === 'function') {
-          console.log('Setting up wallet event listeners...');
-          
-          // Listen for session proposal approval
-          walletConnectClient.on('session_proposal', (proposal: any) => {
-            console.log('Session proposal received:', proposal);
-          });
+        // --- START FIX: Add session_connect listener ---
+        
+        // This is the key event that fires on successful new connection
+        (connector as any).on('session_connect', (session: any) => {
+          console.log('EVENT: session_connect fired', session);
+          handleSessionUpdate(connector, (connector as any).activeSession || session);
+        });
 
-          // Listen for session approval
-          walletConnectClient.on('session_approve', (session: any) => {
-            console.log('Session approved:', session);
+        // This event fires when the session is updated (e.g., chain change)
+        (connector as any).on('session_update', (session: any) => {
+          console.log('EVENT: session_update fired', session);
+          handleSessionUpdate(connector, (connector as any).activeSession || session);
+        });
+        
+        // This event fires when accounts change
+        (connector as any).on(
+          HederaSessionEvent.AccountsChanged,
+          (session: any) => {
+            console.log('EVENT: AccountsChanged fired', session);
             handleSessionUpdate(connector, session);
-          });
-
-          // Listen for session update
-          walletConnectClient.on('session_update', (session: any) => {
-            console.log('Session updated:', session);
-            handleSessionUpdate(connector, session);
-          });
-
-          // Listen for session delete
-          walletConnectClient.on('session_delete', (session: any) => {
-            console.log('Session deleted:', session);
-            setIsConnected(false);
-            setAccountId(null);
-            setNetwork(null);
-            setClient(null);
-          });
-        } else {
-          console.warn('WalletConnect client does not support event listeners');
-        }
+          }
+        );
+        // --- END FIX ---
 
         // Check for existing session
         if ((connector as any).activeSession) {
+          console.log('Found active session on init');
           handleSessionUpdate(connector, (connector as any).activeSession);
         }
       } catch (error) {

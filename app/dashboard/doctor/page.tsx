@@ -4,6 +4,8 @@ import Head from 'next/head';
 import { useHederaWallet } from '@/context/HederaWalletContext';
 import { useToast } from '@/context/ToastContext';
 import { api } from '@/lib/apiClient';
+import { useAuth } from '@/lib/useAuth';
+import { useRouter } from 'next/navigation';
 import Spinner from '@/components/ui/Spinner';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import EmptyState from '@/components/ui/EmptyState';
@@ -41,6 +43,8 @@ interface AccessRequest {
 }
 
 const AZGenesDashboard = () => {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isPrivateDataUnlocked, setIsPrivateDataUnlocked] = useState(false);
@@ -56,6 +60,13 @@ const AZGenesDashboard = () => {
   // Use real Hedera wallet context
   const { isConnected: isWalletConnected, connectWallet, disconnectWallet, accountId } = useHederaWallet();
   const toast = useToast();
+
+  // Redirect to sign-in if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/sign-in');
+    }
+  }, [authLoading, user, router]);
 
   const privateData = userData.filter(item => item.isPrivate);
   const publicData = userData.filter(item => !item.isPrivate);
@@ -426,6 +437,29 @@ const AZGenesDashboard = () => {
       </td>
     </tr>
   );
+
+  // Show loading spinner while auth is loading
+  if (authLoading) {
+    return (
+      <>
+        <Head>
+          <title>Dashboard - AZ-Genes</title>
+          <meta name="description" content="AZ-Genes Dashboard - Manage your genetic data and tokens" />
+        </Head>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Don't render anything if user is not authenticated (will redirect)
+  if (!user) {
+    return null;
+  }
 
   return (
     <>
