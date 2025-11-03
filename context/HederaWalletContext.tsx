@@ -58,6 +58,32 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
     setIsMounted(true);
   }, []);
 
+  // Create a reusable session handler
+  const handleSessionUpdate = useCallback((connector: DAppConnector, session: any) => {
+    if (session) {
+      console.log('Wallet session established/updated:', session);
+      const { peer } = session;
+      const chainId = peer.namespaces.hedera?.chains?.[0] as HederaChainId;
+      const accounts = peer.namespaces.hedera?.accounts || [];
+      
+      if (accounts.length > 0 && chainId) {
+        const connectedAccountId = AccountId.fromString(accounts[0].split(':')[2]);
+        const connectedNetwork =
+          chainId === HederaChainId.Mainnet
+            ? LedgerId.MAINNET
+            : chainId === HederaChainId.Testnet
+            ? LedgerId.TESTNET
+            : LedgerId.PREVIEWNET;
+        
+        setIsConnected(true);
+        setAccountId(connectedAccountId);
+        setNetwork(connectedNetwork);
+        setClient((Client as any).forLedgerId(connectedNetwork).setWallet(connector));
+        console.log('✓ Wallet state updated from event listener.');
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (!isMounted) return;
 
@@ -80,24 +106,43 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
         await connector.init({ logger: 'error' });
         setDAppConnector(connector);
 
+        // Get the walletConnectClient to attach event listeners
+        const walletConnectClient = (connector as any).walletConnectClient;
+        if (walletConnectClient && typeof walletConnectClient.on === 'function') {
+          console.log('Setting up wallet event listeners...');
+          
+          // Listen for session proposal approval
+          walletConnectClient.on('session_proposal', (proposal: any) => {
+            console.log('Session proposal received:', proposal);
+          });
+
+          // Listen for session approval
+          walletConnectClient.on('session_approve', (session: any) => {
+            console.log('Session approved:', session);
+            handleSessionUpdate(connector, session);
+          });
+
+          // Listen for session update
+          walletConnectClient.on('session_update', (session: any) => {
+            console.log('Session updated:', session);
+            handleSessionUpdate(connector, session);
+          });
+
+          // Listen for session delete
+          walletConnectClient.on('session_delete', (session: any) => {
+            console.log('Session deleted:', session);
+            setIsConnected(false);
+            setAccountId(null);
+            setNetwork(null);
+            setClient(null);
+          });
+        } else {
+          console.warn('WalletConnect client does not support event listeners');
+        }
+
         // Check for existing session
         if ((connector as any).activeSession) {
-          const { topic, peer } = (connector as any).activeSession;
-          const chainId = peer.namespaces.hedera?.chains?.[0] as HederaChainId;
-          const accounts = peer.namespaces.hedera?.accounts || [];
-          if (accounts.length > 0 && chainId) {
-            const connectedAccountId = AccountId.fromString(accounts[0].split(':')[2]);
-            const connectedNetwork =
-              chainId === HederaChainId.Mainnet
-                ? LedgerId.MAINNET
-                : chainId === HederaChainId.Testnet
-                ? LedgerId.TESTNET
-                : LedgerId.PREVIEWNET;
-            setIsConnected(true);
-            setAccountId(connectedAccountId);
-            setNetwork(connectedNetwork);
-            setClient((Client as any).forLedgerId(connectedNetwork).setWallet(connector));
-          }
+          handleSessionUpdate(connector, (connector as any).activeSession);
         }
       } catch (error) {
         console.error('Failed to initialize wallet connector:', error);
@@ -105,7 +150,7 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
     };
 
     initConnector();
-  }, [isMounted]);
+  }, [isMounted, handleSessionUpdate]);
 
   const connectWallet = useCallback(async () => {
     if (!dAppConnector) {
@@ -115,50 +160,11 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
     
     try {
       console.log('Opening wallet connection modal...');
-      console.log('Connector methods:', Object.keys(dAppConnector));
-      console.log('Active session before:', (dAppConnector as any).activeSession);
-      
       await (dAppConnector as any).openModal();
-      console.log('Modal opened, waiting for user to connect...');
-      
-      // Poll for session changes - increased poll count and shorter interval
-      const maxPolls = 60;
-      let pollCount = 0;
-      const pollInterval = setInterval(() => {
-        pollCount++;
-        const activeSession = (dAppConnector as any).activeSession;
-        console.log(`Poll ${pollCount}/${maxPolls}: activeSession =`, activeSession);
-        
-        if (activeSession) {
-          clearInterval(pollInterval);
-          console.log('Active session detected!', activeSession);
-          const { topic, peer } = activeSession;
-          console.log('Session peer:', peer);
-          const chainId = peer.namespaces.hedera?.chains?.[0] as HederaChainId;
-          const accounts = peer.namespaces.hedera?.accounts || [];
-          console.log('Chain ID:', chainId, 'Accounts:', accounts);
-          
-          if (accounts.length > 0 && chainId) {
-            const connectedAccountId = AccountId.fromString(accounts[0].split(':')[2]);
-            const connectedNetwork =
-              chainId === HederaChainId.Mainnet
-                ? LedgerId.MAINNET
-                : chainId === HederaChainId.Testnet
-                ? LedgerId.TESTNET
-                : LedgerId.PREVIEWNET;
-            setIsConnected(true);
-            setAccountId(connectedAccountId);
-            setNetwork(connectedNetwork);
-            setClient((Client as any).forLedgerId(connectedNetwork).setWallet(dAppConnector));
-            console.log('✓ Wallet connected:', connectedAccountId.toString());
-          }
-        } else if (pollCount >= maxPolls) {
-          clearInterval(pollInterval);
-          console.log('Timeout waiting for wallet connection');
-        }
-      }, 500); // Check every 500ms instead of 1s
+      console.log('Modal opened, waiting for user to connect via event listener...');
+      // The event listeners will now manage the connection state
     } catch (error) {
-      console.error('Failed to connect wallet:', error);
+      console.error('Failed to open wallet modal:', error);
     }
   }, [dAppConnector]);
 
