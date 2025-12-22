@@ -1,10 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 
 // Firebase client configuration
-// Can be overridden via environment variables, otherwise uses default project values
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyBNYfeKLLyZ4SKpCCkYkftbEFBShMgcBCI",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "az-genes-1ca88.firebaseapp.com",
@@ -18,5 +15,3 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const firestore = getFirestore(app);
-export const storage = getStorage(app);

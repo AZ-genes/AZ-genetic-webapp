@@ -14,7 +14,8 @@ import {
   HederaJsonRpcMethod,
   HederaSessionEvent,
 } from '@hashgraph/hedera-wallet-connect';
-import { LedgerId, AccountId, Client } from '@hashgraph/sdk';
+import { LedgerId, AccountId, Client, Transaction, TransactionResponse, TransactionReceipt } from '@hashgraph/sdk';
+import { walletTransactionService } from '@/src/services/hedera/walletTransactions';
 
 interface HederaWalletContextType {
   isConnected: boolean;
@@ -24,6 +25,8 @@ interface HederaWalletContextType {
   disconnectWallet: () => Promise<void>;
   dAppConnector: DAppConnector | null;
   client: Client | null;
+  signTransaction: <T extends Transaction>(transaction: T) => Promise<T>;
+  executeTransaction: (transaction: Transaction) => Promise<{ response: TransactionResponse; receipt: TransactionReceipt }>;
 }
 
 const HederaWalletContext = createContext<HederaWalletContextType | undefined>(
@@ -67,7 +70,7 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
       const signer = connector.signers[0];
       const connectedAccountId = signer.getAccountId();
       const connectedNetwork = signer.getLedgerId();
-      
+
       console.log('Wallet connected:', connectedAccountId.toString());
       setIsConnected(true);
       setAccountId(connectedAccountId);
@@ -119,12 +122,12 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
       console.error('Wallet connector not initialized');
       return;
     }
-    
+
     try {
       console.log('Opening wallet connection modal...');
       const session = await dAppConnector.openModal();
       console.log('Modal opened, session returned:', session);
-      
+
       // Check immediately if signers are already available
       if (dAppConnector.signers && dAppConnector.signers.length > 0) {
         console.log('Signers immediately available after openModal');
@@ -165,7 +168,7 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
     }
-    
+
     if (dAppConnector) {
       try {
         await dAppConnector.disconnectAll();
@@ -178,7 +181,30 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
     setNetwork(null);
     setClient(null);
   }, [dAppConnector]);
-  
+
+  /**
+   * Signs a transaction with the connected wallet
+   */
+  const signTransaction = useCallback(async <T extends Transaction>(transaction: T): Promise<T> => {
+    if (!dAppConnector || !dAppConnector.signers || dAppConnector.signers.length === 0) {
+      throw new Error('Wallet not connected. Please connect your wallet first.');
+    }
+
+    const signer = dAppConnector.signers[0];
+    const signedTx = await transaction.freezeWithSigner(signer);
+    return signedTx as T;
+  }, [dAppConnector]);
+
+  /**
+   * Executes a transaction using the wallet transaction service
+   */
+  const executeTransaction = useCallback(async (transaction: Transaction) => {
+    if (!dAppConnector) {
+      throw new Error('Wallet not connected');
+    }
+    return walletTransactionService.signAndExecute(dAppConnector, transaction);
+  }, [dAppConnector]);
+
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
@@ -198,6 +224,8 @@ export const HederaWalletProvider = ({ children }: { children: ReactNode }) => {
         disconnectWallet,
         dAppConnector,
         client,
+        signTransaction,
+        executeTransaction,
       }}
     >
       {children}

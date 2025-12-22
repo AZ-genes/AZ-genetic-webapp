@@ -8,6 +8,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { useHederaWallet } from '@/context/HederaWalletContext';
+import { Icon } from '@iconify/react';
 
 
 // Types
@@ -46,6 +47,7 @@ interface UserProfile {
   name?: string;
   email?: string;
   subscription_tier?: 'F1' | 'F2' | 'F3';
+  user_role?: 'patient' | 'doctor' | 'researcher';
 }
 
 const AZGenesDashboard = () => {
@@ -85,14 +87,14 @@ const AZGenesDashboard = () => {
         throw new Error('Failed to fetch files');
       }
       const files = await response.json();
-      
+
       // Transform files to match DataItem interface
       const transformedFiles: DataItem[] = files.map((file: any) => ({
         id: file.id,
         name: file.file_name,
-        type: file.file_type === 'chemical/x-vcf' ? 'genetic' : 
-              file.file_type === 'text/csv' ? 'health' : 
-              file.file_type === 'application/pdf' ? 'professional' : 
+        type: file.file_type === 'chemical/x-vcf' ? 'genetic' :
+          file.file_type === 'text/csv' ? 'health' :
+            file.file_type === 'application/pdf' ? 'professional' :
               'health',
         date: new Date(file.created_at).toLocaleDateString(),
         size: '100 MB', // TODO: Get actual size
@@ -101,7 +103,7 @@ const AZGenesDashboard = () => {
         isPrivate: !!file.encryption_key,
         encrypted: !!file.encryption_key,
       }));
-      
+
       setUserData(transformedFiles);
     } catch (error) {
       console.error('Error loading files:', error);
@@ -178,6 +180,19 @@ const AZGenesDashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
 
+  // Handle role-based redirection
+  useEffect(() => {
+    if (userProfile && !authLoading) {
+      if (userProfile.user_role === 'doctor') {
+        router.push('/dashboard/doctor');
+      } else if (userProfile.user_role === 'researcher') {
+        router.push('/dashboard/researcher');
+      } else if (userProfile.user_role === 'patient') {
+        router.push('/dashboard/individual');
+      }
+    }
+  }, [userProfile, authLoading, router]);
+
   // Load data when switching tabs
   useEffect(() => {
     if (!authLoading && user) {
@@ -201,7 +216,7 @@ const AZGenesDashboard = () => {
         toast.success('Welcome! Your account has been created successfully.');
         window.localStorage.removeItem('showWelcomeMessage');
       }
-      
+
       // Check for login success message
       const showLoginSuccess = window.localStorage.getItem('showLoginSuccessMessage');
       if (showLoginSuccess === 'true') {
@@ -233,7 +248,7 @@ const AZGenesDashboard = () => {
       if (response.ok) {
         const transactions = await response.json();
         setTokenTransactions(transactions);
-        
+
         // Calculate balance from transactions
         const balance = transactions.reduce((acc: number, tx: any) => {
           if (tx.type === 'received' || tx.type === 'earned') {
@@ -341,7 +356,7 @@ const AZGenesDashboard = () => {
       setIsConnecting(false); // <-- ADD THIS on error
     }
   };
-  
+
   // Monitor wallet connection status to provide feedback
   useEffect(() => {
     if (isWalletConnected && accountId) {
@@ -483,170 +498,150 @@ const AZGenesDashboard = () => {
   };
 
   const ConnectWalletModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            {isConnecting ? (
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-            ) : (
-              <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            )}
-          </div>
-          <h3 className="text-xl font-bold text-gray-900 mb-2">
-            {isConnecting ? 'Connecting...' : 'Connect Your Wallet'}
-          </h3>
-          <p className="text-gray-600 mb-6">
-            {isConnecting
-              ? 'Please approve the connection in your Hedera wallet.'
-              : 'Connect your Hedera wallet to access private genetic data and manage your NFT certificates.'}
-          </p>
-          <div className="space-y-3">
-            <button
-              onClick={handleConnectWallet}
-              disabled={isConnecting}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
-            >
-              {isConnecting ? 'Waiting for Approval...' : 'Connect Hedera Wallet'}
-            </button>
-            <button
-              onClick={() => {
-                setShowConnectModal(false);
-                setIsConnecting(false); // <-- ADD THIS
-              }}
-              disabled={isConnecting}
-              className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-          </div>
-          <p className="text-xs text-gray-500 mt-4">
-            By connecting, you agree to our terms of service and privacy policy
-          </p>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => { setShowConnectModal(false); setIsConnecting(false); }}></div>
+      <div className="glass-panel w-full max-w-sm rounded-xl p-6 relative z-10 transition-all duration-300">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-sm font-medium text-white">{isConnecting ? 'Connecting...' : 'Connect Wallet'}</h3>
+          <button onClick={() => { setShowConnectModal(false); setIsConnecting(false); }} className="text-slate-500 hover:text-white transition-colors">
+            <Icon icon="lucide:x" width="16" />
+          </button>
         </div>
+        <div className="space-y-3">
+          <button onClick={handleConnectWallet} disabled={isConnecting} className="w-full flex items-center justify-between p-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 hover:border-emerald-500/30 transition-all group disabled:opacity-50">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-orange-500/20 rounded flex items-center justify-center">
+                <Icon icon="logos:metamask-icon" width="20" />
+              </div>
+              <span className="text-sm font-medium text-slate-200">{isConnecting ? 'Connecting...' : 'Metamask'}</span>
+            </div>
+            {!isConnecting && <span className="text-[10px] text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">Connect</span>}
+          </button>
+          <button disabled className="w-full flex items-center justify-between p-3 rounded-lg bg-white/5 opacity-50 border border-white/5 transition-all">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-blue-500/20 rounded flex items-center justify-center">
+                <Icon icon="logos:walletconnect" width="20" />
+              </div>
+              <span className="text-sm font-medium text-slate-200">WalletConnect</span>
+            </div>
+          </button>
+        </div>
+        <p className="mt-6 text-[10px] text-center text-slate-600">
+          By connecting a wallet, you agree to AZ genes' <a href="#" className="text-slate-400 hover:text-emerald-400 underline">Terms of Service</a>.
+        </p>
       </div>
     </div>
   );
 
   const PrivateDataAccessPanel = () => (
-    <div className="bg-gradient-to-r from-purple-600 to-indigo-700 rounded-xl p-6 text-white mb-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+    <div className="glass-panel rounded-xl p-6 relative overflow-hidden mb-6 border-emerald-500/10">
+      <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent pointer-events-none"></div>
+      <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+        <div className="flex items-center gap-4">
+          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${isPrivateDataUnlocked ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-slate-400'} ring-anim relative`}>
+            <Icon icon={isPrivateDataUnlocked ? "lucide:unlock" : "lucide:lock"} width="24" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold">
-              {isPrivateDataUnlocked ? 'Private Data Access Granted' : 'Secure Private Data Access'}
+            <h3 className="text-sm font-medium text-white">
+              {isPrivateDataUnlocked ? 'Private Data Unlocked' : 'Secure Private Data Access'}
             </h3>
-            <p className="text-purple-100">
-              {isPrivateDataUnlocked 
-                ? 'Your private genetic data is now accessible. Remember to lock when done.' 
-                : 'Connect your wallet and unlock to view sensitive genetic information.'}
+            <p className="text-xs text-slate-500">
+              {isPrivateDataUnlocked
+                ? 'Your sensitive genetic information is now accessible. Lock when done.'
+                : 'Unlock with your Hedera wallet to access sensitive genetic information.'}
             </p>
           </div>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-3">
           {isWalletConnected && (
-            <div className="flex items-center space-x-2 bg-white bg-opacity-20 px-3 py-2 rounded-lg">
-              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-              <span className="text-sm">Wallet Connected</span>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-[10px] font-mono text-emerald-400">Connected</span>
             </div>
           )}
-          {!isPrivateDataUnlocked ? (
-            <button
-              onClick={handleUnlockPrivateData}
-              className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors flex items-center space-x-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              <span>Unlock Private Data</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleLockPrivateData}
-              className="bg-red-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-600 transition-colors flex items-center space-x-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              <span>Lock Private Data</span>
-            </button>
-          )}
+          <button
+            onClick={isPrivateDataUnlocked ? handleLockPrivateData : handleUnlockPrivateData}
+            className={`px-6 py-2 rounded text-xs font-semibold transition-all ${isPrivateDataUnlocked
+              ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20'
+              : 'bg-emerald-500 text-[#020403] hover:bg-emerald-400 shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]'
+              }`}
+          >
+            {isPrivateDataUnlocked ? 'Lock Session' : 'Unlock Data'}
+          </button>
         </div>
       </div>
     </div>
   );
 
   const DataItemRow = ({ item }: { item: DataItem }) => (
-    <tr key={item.id} className="hover:bg-gray-50">
+    <tr className="hover:bg-white/[0.02] group transition-colors border-b border-white/5">
       <td className="px-6 py-4 whitespace-nowrap">
         <div className="flex items-center">
-          <span className="text-lg mr-3">
-            {item.type === 'genetic' ? '🧬' : item.type === 'health' ? '🏥' : '📄'}
-          </span>
+          <div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center mr-3 group-hover:scale-110 transition-transform">
+            <span className="text-lg">
+              {item.type === 'genetic' ? '🧬' : item.type === 'health' ? '🏥' : '📄'}
+            </span>
+          </div>
           <div>
-            <div className="text-sm font-medium text-gray-900 flex items-center">
+            <div className="text-sm font-medium text-slate-200 flex items-center">
               {item.name}
               {item.isPrivate && (
-                <span className="ml-2 bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full flex items-center">
-                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
+                <span className="ml-2 bg-purple-500/10 text-purple-400 text-[10px] px-2 py-0.5 rounded-full border border-purple-500/10 flex items-center">
+                  <Icon icon="lucide:lock" className="mr-1" width="10" />
                   Private
                 </span>
               )}
             </div>
-            <div className="text-sm text-gray-500">{item.accessCount} accesses</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">0.x GENE earned • {item.accessCount} accesses</div>
           </div>
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/10 capitalize font-mono">
           {item.type}
         </span>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.date}</td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.size}</td>
+      <td className="px-6 py-4 whitespace-nowrap text-[11px] text-slate-400 font-mono">{item.date}</td>
+      <td className="px-6 py-4 whitespace-nowrap text-[11px] text-slate-400 font-mono">{item.size}</td>
       <td className="px-6 py-4 whitespace-nowrap">
         {item.nftCertified ? (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          <div className="flex items-center text-emerald-400 text-[10px] font-mono">
+            <Icon icon="lucide:check-circle" className="mr-1" width="14" />
             Certified
-          </span>
+          </div>
         ) : (
-          <button 
+          <button
             onClick={() => handleMintNFT(item.id)}
-            className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+            className="text-slate-500 hover:text-emerald-400 text-[10px] font-medium transition-colors border border-dashed border-white/10 px-2 py-1 rounded"
           >
-            Get Certified
+            Issue NFT
           </button>
         )}
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-        {item.isPrivate && !isPrivateDataUnlocked ? (
-          <button
-            onClick={handleUnlockPrivateData}
-            className="text-purple-600 hover:text-purple-700 font-medium flex items-center"
-          >
-            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            Unlock to View
-          </button>
-        ) : (
-          <>
-            <button className="text-indigo-600 hover:text-indigo-900 mr-3">Share</button>
-            <button className="text-gray-600 hover:text-gray-900">View</button>
-          </>
-        )}
+        <div className="flex items-center gap-3">
+          {item.isPrivate && !isPrivateDataUnlocked ? (
+            <button
+              onClick={handleUnlockPrivateData}
+              className="text-purple-400 hover:text-purple-300 text-[10px] font-medium flex items-center transition-colors"
+            >
+              <Icon icon="lucide:key" className="mr-1" width="14" />
+              Unlock
+            </button>
+          ) : (
+            <>
+              <button className="text-emerald-500 hover:text-emerald-400 transition-colors text-[11px] font-medium">Share</button>
+              <button className="text-slate-500 hover:text-slate-300 transition-colors text-[11px] font-medium">View</button>
+            </>
+          )}
+        </div>
       </td>
     </tr>
   );
+
 
   // Redirect to sign-in if not authenticated
   useEffect(() => {
@@ -657,12 +652,12 @@ const AZGenesDashboard = () => {
 
   // Show loading spinner while auth is loading
   if (authLoading) {
-  return (
-    <>
-      <Head>
-        <title>Dashboard - AZ-Genes</title>
-        <meta name="description" content="AZ-Genes Dashboard - Manage your genetic data and tokens" />
-      </Head>
+    return (
+      <>
+        <Head>
+          <title>Dashboard - AZ-Genes</title>
+          <meta name="description" content="AZ-Genes Dashboard - Manage your genetic data and tokens" />
+        </Head>
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
@@ -681,8 +676,8 @@ const AZGenesDashboard = () => {
   return (
     <>
       <Head>
-        <title>Dashboard - AZ-Genes</title>
-        <meta name="description" content="AZ-Genes Dashboard - Manage your genetic data and tokens" />
+        <title>Dashboard | AZ genes</title>
+        <meta name="description" content="Secure genomic data management on Hedera" />
       </Head>
 
       {/* Hidden file input */}
@@ -694,163 +689,151 @@ const AZGenesDashboard = () => {
         accept=".vcf,.csv,.txt,.tsv,.23andme,.txt,.pdf"
       />
 
-      <div className="flex h-screen bg-gray-100">
+      <div className="flex h-screen bg-[#020403] bg-grid selection:bg-emerald-500/20 selection:text-emerald-200">
         {/* Sidebar */}
-        <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white shadow-lg transition-all duration-300`}>
-          <div className="p-4 border-b border-gray-200">
+        <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} glass-panel border-r border-white/5 transition-all duration-300 flex flex-col z-50`}>
+          <div className="p-6 border-b border-white/5">
             <div className="flex items-center justify-between">
               {sidebarOpen && (
-                <h1 className="text-xl font-bold text-indigo-600">AZ-Genes</h1>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                    <Icon icon="lucide:dna" className="text-emerald-500" width="20" />
+                  </div>
+                  <h1 className="text-lg font-bold text-white tracking-tight">AZ genes</h1>
+                </div>
               )}
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-2 rounded-lg hover:bg-gray-100"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
+              {!sidebarOpen && (
+                <div className="w-8 h-8 rounded bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
+                  <Icon icon="lucide:dna" className="text-emerald-500" width="20" />
+                </div>
+              )}
             </div>
           </div>
 
-          <nav className="mt-6">
+          <nav className="flex-1 mt-6 px-3 space-y-1">
             {[
-              { id: 'overview', name: 'Overview', icon: '📊' },
-              { id: 'data', name: 'My Data', icon: '🧬' },
-              { id: 'tokens', name: 'Token Wallet', icon: '🪙' },
-              { id: 'sharing', name: 'Data Sharing', icon: '🔗' },
-              { id: 'nft', name: 'NFT Certificates', icon: '🎫' },
-              { id: 'analytics', name: 'Analytics', icon: '📈' },
-              { id: 'settings', name: 'Settings', icon: '⚙️' },
+              { id: 'overview', name: 'Overview', icon: 'lucide:layout-dashboard' },
+              { id: 'data', name: 'My Data', icon: 'lucide:dna' },
+              { id: 'tokens', name: 'Token Wallet', icon: 'lucide:wallet' },
+              { id: 'sharing', name: 'Data Sharing', icon: 'lucide:share-2' },
+              { id: 'nft', name: 'NFT Certificates', icon: 'lucide:award' },
+              { id: 'analytics', name: 'Analytics', icon: 'lucide:bar-chart-3' },
+              { id: 'settings', name: 'Settings', icon: 'lucide:settings' },
             ].map((item) => (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center px-4 py-3 text-left transition-colors duration-200 ${
-                  activeTab === item.id
-                    ? 'bg-indigo-50 text-indigo-600 border-r-2 border-indigo-600'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${activeTab === item.id
+                  ? 'bg-emerald-500 text-[#020403] shadow-[0_0_15px_-3px_rgba(16,185,129,0.3)]'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
               >
-                <span className="text-lg mr-3">{item.icon}</span>
-                {sidebarOpen && <span className="font-medium">{item.name}</span>}
+                <Icon icon={item.icon} className={`flex-shrink-0 ${activeTab === item.id ? '' : 'group-hover:text-emerald-400 transition-colors'}`} width="20" />
+                {sidebarOpen && <span className="text-sm font-medium">{item.name}</span>}
               </button>
             ))}
           </nav>
 
-          {/* Wallet Connection Status */}
-          {sidebarOpen && (
-            <div className="absolute bottom-4 left-4 right-4">
-              <div className={`p-4 rounded-lg ${
-                isWalletConnected ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      isWalletConnected ? 'bg-green-500' : 'bg-yellow-500'
-                    }`}></div>
-                    <span className={`text-sm font-medium ${
-                      isWalletConnected ? 'text-green-800' : 'text-yellow-800'
-                    }`}>
-                      {isWalletConnected ? 'Connected' : 'Disconnected'}
-                    </span>
-                  </div>
-                  <button
-                    onClick={isWalletConnected ? handleDisconnectWallet : () => setShowConnectModal(true)}
-                    className={`text-xs ${
-                      isWalletConnected ? 'text-green-600 hover:text-green-700' : 'text-yellow-600 hover:text-yellow-700'
-                    }`}
-                  >
-                    {isWalletConnected ? 'Disconnect' : 'Connect'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+          {/* Sidebar Footer / Toggle */}
+          <div className="p-4 border-t border-white/5">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-white transition-colors group"
+            >
+              <Icon icon={sidebarOpen ? "lucide:chevron-left" : "lucide:chevron-right"} width="20" />
+              {sidebarOpen && <span className="text-xs font-medium uppercase tracking-wider">Collapse Menu</span>}
+            </button>
+          </div>
+        </aside>
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
-          <header className="bg-white shadow-sm z-10">
-            <div className="flex items-center justify-between px-6 py-4">
+          <header className="glass-panel border-b border-white/5 z-40 sticky top-0">
+            <div className="flex items-center justify-between px-8 py-4">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 capitalize">
+                <h1 className="text-xl font-bold text-white tracking-tight">
                   {activeTab === 'overview' ? 'Dashboard Overview' : activeTab.replace('-', ' ')}
                 </h1>
-                <p className="text-gray-600">
-                  Welcome back{userProfile?.name ? `, ${userProfile.name}` : ''}
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Secure Data Vault • <span className="text-emerald-500/80">Hedera Network</span>
                 </p>
               </div>
-              
-              <div className="flex items-center space-x-4">
+
+              <div className="flex items-center gap-6">
                 {/* Wallet Connection Status */}
                 {isWalletConnected && accountId && (
-                  <div className="flex items-center space-x-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-green-800">
-                      {accountId.toString()}
-                    </span>
+                  <div className="flex items-center gap-3 px-3 py-1.5 bg-emerald-500/5 border border-emerald-500/10 rounded-lg">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-slate-500 leading-none">Connected Wallet</span>
+                      <span className="text-xs font-mono text-emerald-400 font-medium">
+                        {accountId.toString()}
+                      </span>
+                    </div>
                     <button
                       onClick={handleDisconnectWallet}
-                      className="text-green-600 hover:text-green-700 ml-2"
+                      className="p-1 hover:bg-red-500/10 text-slate-600 hover:text-red-400 rounded transition-colors"
+                      title="Disconnect Wallet"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      <Icon icon="lucide:log-out" width="14" />
                     </button>
                   </div>
                 )}
-                
+
                 {!isWalletConnected && (
                   <button
                     onClick={() => setShowConnectModal(true)}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center space-x-2"
+                    className="glass-btn px-4 py-2 text-xs font-semibold flex items-center gap-2"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
+                    <Icon icon="lucide:wallet" className="text-emerald-500" width="16" />
                     <span>Connect Wallet</span>
                   </button>
                 )}
-                
-                <div className="relative">
-                  <button className="p-2 bg-indigo-50 rounded-lg hover:bg-indigo-100">
-                    <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      3
-                    </span>
+
+                <div className="h-8 w-[1px] bg-white/5"></div>
+
+                <div className="flex items-center gap-2">
+                  <button className="relative p-2 text-slate-400 hover:text-white transition-colors">
+                    <Icon icon="lucide:bell" width="20" />
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full border border-[#020403]"></span>
                   </button>
                 </div>
-                
-                <div className="flex items-center space-x-3">
-                  <div className="text-right">
-                    <p className="font-semibold text-gray-900">
-                      {userProfile?.name || user?.email || 'User'}
+
+                <div className="flex items-center gap-3 pl-2">
+                  <div className="text-right hidden sm:block">
+                    <p className="text-xs font-medium text-white leading-none">
+                      {userProfile?.name || user?.email?.split('@')[0] || 'User'}
                     </p>
-                    <p className="text-sm text-gray-600">
-                      {userProfile?.subscription_tier || 'Member'}
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {userProfile?.subscription_tier ? `${userProfile.subscription_tier} Tier` : 'Basic Member'}
                     </p>
                   </div>
                   <div className="relative profile-dropdown">
                     <button
                       onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                      className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold hover:bg-indigo-700 transition-colors"
+                      className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center text-[#020403] font-bold text-xs ring-4 ring-emerald-500/10 hover:ring-emerald-500/20 transition-all shadow-[0_0_15px_-5px_rgba(16,185,129,0.5)]"
                     >
                       {getUserInitials(userProfile?.name, userProfile?.email || user?.email || undefined)}
                     </button>
                     {showProfileDropdown && (
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                      <div className="absolute right-0 mt-3 w-48 glass-panel rounded-lg py-1 z-50 border-white/5 shadow-2xl overflow-hidden">
+                        <div className="px-4 py-3 border-b border-white/5 space-y-0.5 sm:hidden">
+                          <p className="text-xs font-medium text-white">{userProfile?.name || 'User'}</p>
+                          <p className="text-[10px] text-slate-500">{user?.email}</p>
+                        </div>
+                        <button
+                          onClick={() => setActiveTab('settings')}
+                          className="w-full px-4 py-2.5 text-left text-xs text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-2"
+                        >
+                          <span className="iconify" data-icon="lucide:user" data-width="14"></span>
+                          Account Settings
+                        </button>
                         <button
                           onClick={handleLogout}
-                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                          className="w-full px-4 py-2.5 text-left text-xs text-red-400 hover:bg-red-500/5 flex items-center gap-2"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                          </svg>
-                          <span>Log Out</span>
+                          <span className="iconify" data-icon="lucide:power" data-width="14"></span>
+                          Log Out
                         </button>
                       </div>
                     )}
@@ -871,53 +854,58 @@ const AZGenesDashboard = () => {
               <div className="space-y-6">
                 {/* Enhanced Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <div className="flex items-center justify-between">
+                  <div className="glass-panel p-6 rounded-xl border-white/5 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="flex items-center justify-between relative z-10">
                       <div>
-                        <p className="text-sm font-medium text-gray-600">Total Data Stored</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.totalData}</p>
+                        <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Total Data Stored</p>
+                        <p className="text-2xl font-bold text-white mt-1 font-mono">{stats.totalData}</p>
                       </div>
-                      <div className="p-3 bg-blue-50 rounded-lg">
-                        <span className="text-2xl">🧬</span>
+                      <div className="p-3 bg-emerald-500/10 rounded-lg text-emerald-500">
+                        <span className="iconify" data-icon="lucide:database" data-width="24"></span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <div className="flex items-center justify-between">
+                  <div className="glass-panel p-6 rounded-xl border-white/5 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="flex items-center justify-between relative z-10">
                       <div>
-                        <p className="text-sm font-medium text-gray-600">Private Files</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.privateFiles}</p>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Private Files</p>
+                        <p className="text-2xl font-bold text-white mt-1 font-mono">{stats.privateFiles}</p>
+                        <p className={`text-[10px] mt-1 flex items-center gap-1 ${isPrivateDataUnlocked ? 'text-emerald-400' : 'text-purple-400'}`}>
+                          <span className="iconify" data-icon={isPrivateDataUnlocked ? "lucide:unlock" : "lucide:lock"} data-width="10"></span>
                           {isPrivateDataUnlocked ? 'Unlocked' : 'Locked'}
                         </p>
                       </div>
-                      <div className="p-3 bg-purple-50 rounded-lg">
-                        <span className="text-2xl">🔒</span>
+                      <div className={`p-3 rounded-lg ${isPrivateDataUnlocked ? 'bg-emerald-500/10 text-emerald-500' : 'bg-purple-500/10 text-purple-500'}`}>
+                        <span className="iconify" data-icon="lucide:shield-check" data-width="24"></span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <div className="flex items-center justify-between">
+                  <div className="glass-panel p-6 rounded-xl border-white/5 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="flex items-center justify-between relative z-10">
                       <div>
-                        <p className="text-sm font-medium text-gray-600">Utility Tokens</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.totalTokens}</p>
+                        <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Utility Tokens</p>
+                        <p className="text-2xl font-bold text-white mt-1 font-mono">{stats.totalTokens}</p>
                       </div>
-                      <div className="p-3 bg-yellow-50 rounded-lg">
-                        <span className="text-2xl">🪙</span>
+                      <div className="p-3 bg-emerald-500/10 rounded-lg text-emerald-500">
+                        <span className="iconify" data-icon="lucide:coins" data-width="24"></span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <div className="flex items-center justify-between">
+                  <div className="glass-panel p-6 rounded-xl border-white/5 relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="flex items-center justify-between relative z-10">
                       <div>
-                        <p className="text-sm font-medium text-gray-600">NFT Certified</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.nftCertified}</p>
+                        <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">NFT Certified</p>
+                        <p className="text-2xl font-bold text-white mt-1 font-mono">{stats.nftCertified}</p>
                       </div>
-                      <div className="p-3 bg-green-50 rounded-lg">
-                        <span className="text-2xl">🎫</span>
+                      <div className="p-3 bg-emerald-500/10 rounded-lg text-emerald-500">
+                        <span className="iconify" data-icon="lucide:award" data-width="24"></span>
                       </div>
                     </div>
                   </div>
@@ -929,42 +917,44 @@ const AZGenesDashboard = () => {
             )}
 
             {activeTab === 'data' && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-                <div className="p-6 border-b border-gray-200">
+              <div className="glass-panel rounded-xl border-white/5 overflow-hidden">
+                <div className="p-6 border-b border-white/5">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-gray-900">My Genetic Data</h2>
-                    <div className="flex items-center space-x-3">
+                    <div>
+                      <h2 className="text-lg font-bold text-white tracking-tight">My Genetic Data</h2>
+                      <p className="text-xs text-slate-500">Manage and share your encrypted genomic assets</p>
+                    </div>
+                    <div className="flex items-center gap-4">
                       {privateData.length > 0 && (
-                        <div className="flex items-center space-x-2 text-sm text-gray-600">
-                          <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                          <span>{privateData.length} private files</span>
+                        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-500/5 border border-purple-500/10">
+                          <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse"></span>
+                          <span className="text-[10px] font-mono text-purple-400">{privateData.length} Vaulted Files</span>
                         </div>
                       )}
-                      <button 
+                      <button
                         onClick={handleUploadClick}
                         disabled={isUploading}
-                        className={`bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors ${
-                          isUploading ? 'opacity-50 cursor-not-allowed' : ''
-                        }`}
+                        className="glass-btn px-4 py-2 text-xs font-semibold flex items-center gap-2 disabled:opacity-50"
                       >
-                        {isUploading ? 'Uploading...' : 'Upload New Data'}
+                        <span className="iconify text-emerald-500" data-icon={isUploading ? "lucide:loader-2" : "lucide:upload-cloud"} data-width="16"></span>
+                        <span>{isUploading ? 'Encrypting...' : 'Upload Data'}</span>
                       </button>
                     </div>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Name</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NFT Certified</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <thead>
+                      <tr className="bg-white/[0.02]">
+                        <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider">Asset Name</th>
+                        <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider">Category</th>
+                        <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider">Timestamp</th>
+                        <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider">Size</th>
+                        <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider">Hedera Proof</th>
+                        <th className="px-6 py-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-white/5">
                       {/* Public Data */}
                       {publicData.map((item) => (
                         <DataItemRow key={item.id} item={item} />
@@ -983,77 +973,78 @@ const AZGenesDashboard = () => {
             {activeTab === 'tokens' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1">
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Token Balance</h3>
-                    <div className="text-center py-8">
-                      <div className="text-4xl font-bold text-indigo-600 mb-2">{tokenBalance}</div>
-                      <p className="text-gray-600">Utility Tokens</p>
-                      <div className="mt-6 space-y-3">
-                        <button 
+                  <div className="glass-panel p-6 rounded-xl border-white/5">
+                    <div className="flex items-center gap-2 mb-6">
+                      <span className="iconify text-emerald-500" data-icon="lucide:wallet" data-width="18"></span>
+                      <h3 className="text-sm font-semibold text-white">Token Balance</h3>
+                    </div>
+                    <div className="text-center py-4">
+                      <div className="text-4xl font-bold text-emerald-500 mb-1 font-mono">{tokenBalance}</div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-medium">GENE Utility Tokens</p>
+                      <div className="mt-8 space-y-3">
+                        <button
                           onClick={() => setShowBuyTokensModal(true)}
-                          className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+                          className="w-full bg-emerald-500 text-[#020403] py-2.5 rounded text-xs font-bold hover:bg-emerald-400 transition-all shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]"
                         >
-                          Buy Tokens
+                          Acquire Tokens
                         </button>
-                        <button 
+                        <button
                           onClick={() => setShowTransferTokensModal(true)}
-                          className="w-full border border-indigo-600 text-indigo-600 py-2 rounded-lg hover:bg-indigo-50 transition-colors"
+                          className="w-full glass-btn py-2.5 text-xs font-semibold"
                         >
-                          Transfer Tokens
+                          Transfer Assets
                         </button>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="lg:col-span-2">
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Transaction History</h3>
+                  <div className="glass-panel p-6 rounded-xl border-white/5 h-full">
+                    <div className="flex items-center gap-2 mb-6">
+                      <span className="iconify text-emerald-500" data-icon="lucide:history" data-width="18"></span>
+                      <h3 className="text-sm font-semibold text-white">Transaction History</h3>
+                    </div>
                     {loadingTokenTransactions ? (
                       <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+                        <span className="iconify animate-spin text-emerald-500" data-icon="lucide:loader-2" data-width="32"></span>
                       </div>
                     ) : tokenTransactions.length > 0 ? (
-                    <div className="space-y-4">
-                      {tokenTransactions.map((transaction) => (
-                        <div key={transaction.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                          <div className="flex items-center space-x-4">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                transaction.type === 'received' ? 'bg-green-100' :
-                              transaction.type === 'spent' ? 'bg-red-100' : 'bg-blue-100'
-                            }`}>
-                              <span className={`text-lg ${
-                                  transaction.type === 'received' ? 'text-green-600' :
-                                transaction.type === 'spent' ? 'text-red-600' : 'text-blue-600'
-                              }`}>
-                                  {transaction.type === 'received' ? '↑' : transaction.type === 'spent' ? '↓' : '↔'}
-                              </span>
-                            </div>
-                            <div>
-                                <p className="font-medium text-gray-900">
-                                  {transaction.type === 'received' ? 'Tokens Received' : 'Tokens Transferred'}
+                      <div className="space-y-3">
+                        {tokenTransactions.map((transaction) => (
+                          <div key={transaction.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] border border-white/5 group hover:bg-white/5 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center ${transaction.type === 'received' ? 'bg-emerald-500/10 text-emerald-500' :
+                                transaction.type === 'spent' ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'
+                                }`}>
+                                <span className="iconify" data-icon={transaction.type === 'received' ? "lucide:arrow-down-left" : "lucide:arrow-up-right"} data-width="18"></span>
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-white">
+                                  {transaction.type === 'received' ? 'Incoming GENE' : 'Outgoing GENE'}
                                 </p>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-[10px] text-slate-500 font-mono">
                                   {transaction.type === 'received' ? transaction.sender_id : transaction.recipient_id}
                                 </p>
+                              </div>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <p className={`font-bold ${
-                                transaction.type === 'received' ? 'text-green-600' :
-                              transaction.type === 'spent' ? 'text-red-600' : 'text-blue-600'
-                            }`}>
-                                {transaction.type === 'received' ? '+' : '-'}
-                              {transaction.amount} tokens
-                            </p>
-                              <p className="text-sm text-gray-600">
+                            <div className="text-right">
+                              <p className={`text-xs font-bold font-mono ${transaction.type === 'received' ? 'text-emerald-500' :
+                                transaction.type === 'spent' ? 'text-red-500' : 'text-blue-500'
+                                }`}>
+                                {transaction.type === 'received' ? '+' : '-'}{transaction.amount}
+                              </p>
+                              <p className="text-[10px] text-slate-600 mt-0.5">
                                 {transaction.timestamp ? new Date(transaction.timestamp).toLocaleDateString() : 'N/A'}
                               </p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
                     ) : (
-                      <p className="text-gray-600 text-center py-12">No transactions yet</p>
+                      <div className="text-center py-12">
+                        <span className="iconify text-slate-800 mx-auto mb-3" data-icon="lucide:info" data-width="32"></span>
+                        <p className="text-[11px] text-slate-500">No recent transactions indexed</p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1062,38 +1053,45 @@ const AZGenesDashboard = () => {
 
             {/* Data Sharing Tab */}
             {activeTab === 'sharing' && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">Data Sharing Management</h2>
+              <div className="glass-panel rounded-xl border-white/5 p-8">
+                <div className="mb-8">
+                  <h2 className="text-lg font-bold text-white tracking-tight">Data Sharing Management</h2>
+                  <p className="text-xs text-slate-500 mt-1">Review and manage access permissions for your genomic assets</p>
+                </div>
                 {loadingAccessRequests ? (
                   <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+                    <span className="iconify animate-spin text-emerald-500" data-icon="lucide:loader-2" data-width="32"></span>
                   </div>
                 ) : accessRequests.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {accessRequests.map((request) => (
-                      <div key={request.id} className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{request.file_name}</h3>
-                            <p className="text-sm text-gray-600">
-                              Access Level: <span className="font-medium capitalize">{request.access_level}</span>
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              Requested: {new Date(request.request_date).toLocaleDateString()}
-                            </p>
+                      <div key={request.id} className="p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:border-emerald-500/30 transition-all group">
+                        <div className="flex items-start justify-between">
+                          <div className="flex gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                              <span className="iconify" data-icon="lucide:file-text" data-width="20"></span>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">{request.file_name}</h3>
+                              <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 uppercase tracking-wider font-mono">
+                                <span className="iconify" data-icon="lucide:shield" data-width="10"></span>
+                                {request.access_level} Access
+                              </p>
+                              <p className="text-[10px] text-slate-600 mt-1">Requested: {new Date(request.request_date).toLocaleDateString()}</p>
+                            </div>
                           </div>
-                          <div className="flex items-center space-x-3">
-                            <button 
+                          <div className="flex flex-col gap-2">
+                            <button
                               onClick={() => handleApproveRequest(request.id)}
-                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                              className="px-3 py-1.5 bg-emerald-500 text-[#020403] rounded text-[10px] font-bold hover:bg-emerald-400 transition-all"
                             >
                               Approve
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleDenyRequest(request.id)}
-                              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                              className="px-3 py-1.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-[10px] font-bold hover:bg-red-500/20 transition-all"
                             >
-                              Deny
+                              Revoke
                             </button>
                           </div>
                         </div>
@@ -1101,66 +1099,90 @@ const AZGenesDashboard = () => {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-600 text-center py-12">No pending access requests</p>
+                  <div className="text-center py-16">
+                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/5">
+                      <span className="iconify text-slate-700" data-icon="lucide:inbox" data-width="32"></span>
+                    </div>
+                    <p className="text-sm text-slate-400 font-medium">Clear Inbox</p>
+                    <p className="text-xs text-slate-600 mt-1">No pending access requests at this time</p>
+                  </div>
                 )}
               </div>
             )}
 
             {/* NFT Certificates Tab */}
             {activeTab === 'nft' && (
-              <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">NFT Certificates</h2>
-                  {loadingNFTs ? (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-                    </div>
-                  ) : nftCertificates.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {nftCertificates.map((nft) => (
-                        <div key={nft.id} className="border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
-                          <div className="flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-lg mb-4 mx-auto">
-                            <span className="text-3xl">🎫</span>
+              <div className="glass-panel rounded-xl border-white/5 p-8">
+                <div className="mb-8">
+                  <h2 className="text-lg font-bold text-white tracking-tight">NFT Certificates</h2>
+                  <p className="text-xs text-slate-500 mt-1">Proof of authenticity for your genetic data stored on Hedera</p>
+                </div>
+                {loadingNFTs ? (
+                  <div className="flex items-center justify-center py-12">
+                    <span className="iconify animate-spin text-emerald-500" data-icon="lucide:loader-2" data-width="32"></span>
+                  </div>
+                ) : nftCertificates.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {nftCertificates.map((nft) => (
+                      <div key={nft.id} className="glass-panel p-6 rounded-xl border-white/10 hover:border-emerald-500/30 transition-all group relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-2 opacity-20 group-hover:opacity-100 transition-opacity">
+                          <span className="iconify text-emerald-500" data-icon="lucide:check-circle" data-width="16"></span>
+                        </div>
+                        <div className="flex items-center justify-center w-20 h-20 bg-emerald-500/10 rounded-2xl mb-6 mx-auto group-hover:scale-110 transition-transform duration-500">
+                          <span className="iconify text-emerald-500" data-icon="lucide:award" data-width="40"></span>
+                        </div>
+                        <h3 className="font-bold text-white mb-4 text-center group-hover:text-emerald-400 transition-colors uppercase tracking-tight">{nft.file_name}</h3>
+                        <div className="space-y-3 pt-4 border-t border-white/5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-slate-500">TOKEN ID</span>
+                            <span className="text-[10px] font-mono text-emerald-400">{nft.token_id.substring(0, 16)}...</span>
                           </div>
-                          <h3 className="font-semibold text-gray-900 mb-2 text-center">{nft.file_name}</h3>
-                          <div className="space-y-2 text-sm text-gray-600">
-                            <p>Token ID: {nft.token_id.substring(0, 20)}...</p>
-                            <p>Serial: {nft.serial_number}</p>
-                            <p>Created: {new Date(nft.created_at).toLocaleDateString()}</p>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-slate-500">SERIAL</span>
+                            <span className="text-[10px] font-mono text-white"># {nft.serial_number}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-slate-500">TIMESTAMP</span>
+                            <span className="text-[10px] font-mono text-slate-400">{new Date(nft.created_at).toLocaleDateString()}</span>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-600 text-center py-12">No NFT certificates yet. Mint one from your files!</p>
-                  )}
-                </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-20 border-2 border-dashed border-white/5 rounded-2xl">
+                    <span className="iconify text-slate-800 mx-auto mb-4" data-icon="lucide:award" data-width="48"></span>
+                    <p className="text-slate-400 font-medium">No Certificates Found</p>
+                    <p className="text-xs text-slate-600 mt-2 max-w-xs mx-auto">Upload genetic data and mint an NFT to receive a cryptographic certificate of data ownership.</p>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Analytics Tab */}
             {activeTab === 'analytics' && (
-              <div className="space-y-6">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h2 className="text-xl font-bold text-gray-900 mb-6">Analytics Dashboard</h2>
+              <div className="glass-panel rounded-xl border-white/5 p-12 text-center">
+                <div className="max-w-md mx-auto">
+                  <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-8 border border-white/10 ${userProfile?.subscription_tier === 'F3' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                    <span className="iconify" data-icon={userProfile?.subscription_tier === 'F3' ? "lucide:bar-chart-big" : "lucide:lock"} data-width="40"></span>
+                  </div>
+                  <h2 className="text-xl font-bold text-white mb-3">Analytics Dashboard</h2>
                   {userProfile?.subscription_tier === 'F3' ? (
-                    <div className="text-center py-12">
-                      <div className="text-6xl mb-4">📊</div>
-                      <p className="text-gray-600 mb-4">Analytics dashboard is available for F3 tier users.</p>
-                      <p className="text-sm text-gray-500">Contact us to upgrade to F3 tier for advanced analytics features.</p>
-                    </div>
+                    <>
+                      <p className="text-sm text-slate-400 mb-8 font-medium">Coming Soon: Integrated Genomic Analytics & Heritage Insights</p>
+                      <div className="p-4 bg-emerald-500/5 rounded-lg border border-emerald-500/10 inline-block text-[10px] font-mono text-emerald-400 tracking-wider">PREVIEW ENROLLED</div>
+                    </>
                   ) : (
-                    <div className="text-center py-12">
-                      <div className="text-6xl mb-4">🔒</div>
-                      <h3 className="text-xl font-semibold text-gray-900 mb-2">Upgrade Required</h3>
-                      <p className="text-gray-600 mb-6">Analytics dashboard is only available for F3 tier subscribers.</p>
-                      <button 
+                    <>
+                      <p className="text-sm text-slate-400 mb-2 font-medium">Enterprise Analytics Reserved for F3 Tier Subscribers</p>
+                      <p className="text-xs text-slate-600 mb-8">Unlock advanced genetic pattern analysis, ancestry tracking, and comparative health metrics.</p>
+                      <button
                         onClick={() => handleTierChange('F3')}
-                        className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                        className="glass-btn px-8 py-3 text-xs font-bold uppercase tracking-widest text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/10"
                       >
-                        Upgrade to F3
+                        Upgrade to F3 Tier
                       </button>
-                    </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -1168,72 +1190,75 @@ const AZGenesDashboard = () => {
 
             {/* Settings Tab */}
             {activeTab === 'settings' && (
-              <div className="space-y-6">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h2 className="text-xl font-bold text-gray-900 mb-6">Settings</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="glass-panel p-8 rounded-xl border-white/5">
+                  <h2 className="text-sm font-bold text-white uppercase tracking-widest mb-8 border-b border-white/5 pb-4">Identity & Access</h2>
                   <div className="space-y-6">
-                    {/* Profile Settings */}
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Profile Information</h3>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                          <input
-                            type="text"
-                            defaultValue={userProfile?.name || ''}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            onChange={(e) => setEditingProfile({ ...editingProfile || userProfile, name: e.target.value } as UserProfile)}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                          <input
-                            type="email"
-                            defaultValue={userProfile?.email || user?.email || ''}
-                            disabled
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
-                        </div>
-                      </div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Full Legal Name</label>
+                      <input
+                        type="text"
+                        defaultValue={userProfile?.name || ''}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
+                        onChange={(e) => setEditingProfile({ ...editingProfile || userProfile, name: e.target.value } as UserProfile)}
+                      />
                     </div>
-
-                    {/* Subscription Tier */}
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Subscription Tier</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {['F1', 'F2', 'F3'].map((tier) => (
-                          <div
-                            key={tier}
-                            onClick={() => handleTierChange(tier as 'F1' | 'F2' | 'F3')}
-                            className={`border-2 rounded-xl p-6 cursor-pointer transition-colors ${
-                              userProfile?.subscription_tier === tier
-                                ? 'border-indigo-600 bg-indigo-50'
-                                : 'border-gray-200 hover:border-indigo-300'
-                            }`}
-                          >
-                            <div className="text-center">
-                              <div className={`text-3xl font-bold mb-2 ${userProfile?.subscription_tier === tier ? 'text-indigo-600' : 'text-gray-600'}`}>
-                                {tier}
-                              </div>
-                              <p className="text-sm text-gray-600">
-                                {tier === 'F1' && 'Basic Access'}
-                                {tier === 'F2' && 'Advanced Features'}
-                                {tier === 'F3' && 'Professional Plan'}
-                              </p>
-                            </div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Authenticated Email</label>
+                      <div className="relative group">
+                        <input
+                          type="email"
+                          defaultValue={userProfile?.email || user?.email || ''}
+                          disabled
+                          className="w-full bg-white/[0.02] border border-white/10 rounded-lg px-4 py-3 text-sm text-slate-500 cursor-not-allowed opacity-70"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 iconify text-slate-600" data-icon="lucide:lock" data-width="14"></span>
+                      </div>
+                      <p className="text-[10px] text-slate-700 mt-2 font-medium italic">Secondary identifiers can only be modified through central auth provider</p>
+                    </div>
+                    <div className="pt-4 border-t border-white/5 flex gap-4">
+                      <button
+                        onClick={() => editingProfile && handleUpdateProfile(editingProfile)}
+                        className="flex-1 bg-emerald-500 text-[#020403] py-3 rounded text-xs font-bold hover:bg-emerald-400 transition-all shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]"
+                      >
+                        Apply Changes
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="glass-panel p-8 rounded-xl border-white/5">
+                  <h2 className="text-sm font-bold text-white uppercase tracking-widest mb-8 border-b border-white/5 pb-4">Service Tier Allocation</h2>
+                  <div className="space-y-4">
+                    {['F1', 'F2', 'F3'].map((tier) => (
+                      <div
+                        key={tier}
+                        onClick={() => handleTierChange(tier as 'F1' | 'F2' | 'F3')}
+                        className={`p-4 rounded-xl cursor-pointer border transition-all relative group overflow-hidden ${userProfile?.subscription_tier === tier
+                          ? 'bg-emerald-500/10 border-emerald-500/30'
+                          : 'bg-white/5 border-white/10 hover:border-white/20'
+                          }`}
+                      >
+                        {userProfile?.subscription_tier === tier && (
+                          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`text-lg font-bold font-mono ${userProfile?.subscription_tier === tier ? 'text-emerald-500' : 'text-white/60 group-hover:text-white transition-colors'}`}>
+                              {tier} Protocol
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-medium">
+                              {tier === 'F1' && 'Standard Private Storage'}
+                              {tier === 'F2' && 'Advanced Search & Multi-Chain'}
+                              {tier === 'F3' && 'Full Ecosystem Analytics'}
+                            </p>
                           </div>
-                        ))}
+                          {userProfile?.subscription_tier === tier && (
+                            <span className="iconify text-emerald-500" data-icon="lucide:check-circle-2" data-width="20"></span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-
-                    {/* Save Button */}
-                    <button
-                      onClick={() => editingProfile && handleUpdateProfile(editingProfile)}
-                      className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-                    >
-                      Save Changes
-                    </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1247,40 +1272,46 @@ const AZGenesDashboard = () => {
 
       {/* Buy Tokens Modal */}
       {showBuyTokensModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Buy Tokens</h3>
-              <p className="text-gray-600">Purchase utility tokens for your genetic data platform</p>
-            </div>
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                <input
-                  type="number"
-                  placeholder="Enter amount"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#020403]/90 backdrop-blur-sm" onClick={() => setShowBuyTokensModal(false)}></div>
+          <div className="glass-panel w-full max-w-sm rounded-2xl relative z-10 p-8 border-white/5 overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
+            <div className="text-center mb-10">
+              <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <span className="iconify text-emerald-500" data-icon="lucide:shopping-cart" data-width="32"></span>
               </div>
+              <h3 className="text-lg font-bold text-white mb-2 uppercase tracking-widest">Protocol Credits</h3>
+              <p className="text-[11px] text-slate-500 uppercase tracking-widest font-medium">Acquire GENE utility tokens</p>
+            </div>
+            <div className="space-y-6 mb-10">
               <div>
-                <p className="text-sm text-gray-600">1 Token = $0.10 USD</p>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1">Allocation Amount</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 text-xl font-mono text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-500 font-mono">GENE</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center px-1">
+                <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Market Rate</span>
+                <span className="text-[10px] text-slate-400 font-mono">1 GENE ≈ $0.10 USD</span>
               </div>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <button
-                onClick={() => {
-                  const amount = 100;
-                  handleBuyTokens(amount);
-                }}
-                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                onClick={() => handleBuyTokens(100)}
+                className="w-full bg-emerald-500 text-[#020403] py-4 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)]"
               >
-                Purchase 100 Tokens ($10)
+                Execute Purchase
               </button>
               <button
                 onClick={() => setShowBuyTokensModal(false)}
-                className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                className="w-full text-slate-500 py-3 text-[10px] font-bold uppercase tracking-widest hover:text-white transition-colors"
               >
-                Cancel
+                Return to Vault
               </button>
             </div>
           </div>
@@ -1289,33 +1320,41 @@ const AZGenesDashboard = () => {
 
       {/* Transfer Tokens Modal */}
       {showTransferTokensModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Transfer Tokens</h3>
-              <p className="text-gray-600">Send tokens to another user</p>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#020403]/90 backdrop-blur-sm" onClick={() => setShowTransferTokensModal(false)}></div>
+          <div className="glass-panel w-full max-w-sm rounded-2xl relative z-10 p-8 border-white/5 overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
+            <div className="text-center mb-10">
+              <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <span className="iconify text-blue-500" data-icon="lucide:send" data-width="32"></span>
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2 uppercase tracking-widest">Asset Transfer</h3>
+              <p className="text-[11px] text-slate-500 uppercase tracking-widest font-medium">Relocate GENE utility tokens</p>
             </div>
-            <div className="space-y-4 mb-6">
+            <div className="space-y-6 mb-10">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Recipient Account ID</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1">Recipient Protocol ID</label>
                 <input
                   type="text"
                   id="transfer-recipient"
-                  placeholder="Enter recipient account ID"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="0.0.xxxxx"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-white focus:outline-none focus:border-blue-500/50 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                <input
-                  type="number"
-                  id="transfer-amount"
-                  placeholder="Enter amount"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1">Transfer Amount</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    id="transfer-amount"
+                    placeholder="0.00"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-white focus:outline-none focus:border-blue-500/50 transition-colors"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-500 font-mono">GENE</span>
+                </div>
               </div>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <button
                 onClick={() => {
                   const recipientId = (document.getElementById('transfer-recipient') as HTMLInputElement)?.value;
@@ -1323,18 +1362,18 @@ const AZGenesDashboard = () => {
                   if (recipientId && amount > 0) {
                     handleTransferTokens(recipientId, amount);
                   } else {
-                    toast.error('Please enter valid recipient ID and amount');
+                    toast.error('Invalid Protocol Parameters');
                   }
                 }}
-                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                className="w-full bg-blue-500 text-white py-4 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-blue-400 transition-all shadow-[0_0_20px_-5px_rgba(59,130,246,0.5)]"
               >
-                Transfer Tokens
+                Initiate Transfer
               </button>
               <button
                 onClick={() => setShowTransferTokensModal(false)}
-                className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                className="w-full text-slate-500 py-3 text-[10px] font-bold uppercase tracking-widest hover:text-white transition-colors"
               >
-                Cancel
+                Cancel Protocol
               </button>
             </div>
           </div>

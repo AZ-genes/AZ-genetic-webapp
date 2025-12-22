@@ -1,8 +1,6 @@
 export interface AuthContext {
   user?: any;
   supabase?: any;
-  firestore?: any;
-  storage?: any;
 }
 
 export interface EdgeFunctionConfig {
@@ -14,7 +12,7 @@ export interface EdgeFunctionConfig {
 export function getEdgeConfig(): EdgeFunctionConfig {
   const isTestMode = process.env.NODE_ENV === 'test';
   const skipAuth = isTestMode && process.env.SKIP_AUTH_IN_TEST === 'true';
-  
+
   return {
     isTestMode,
     skipAuth
@@ -29,34 +27,34 @@ export function createTestClient() {
 
   return {
     auth: {
-      getUser: async () => ({ 
-        data: { 
-          user: { 
+      getUser: async () => ({
+        data: {
+          user: {
             id: 'test-user-id',
             email: 'test@example.com'
-          } 
-        }, 
-        error: null 
+          }
+        },
+        error: null
       })
     },
     from: (table: string) => ({
       select: () => ({
         eq: () => ({
-          single: () => Promise.resolve({ 
-            data: { 
+          single: () => Promise.resolve({
+            data: {
               id: 'test-profile-id',
               auth_id: 'test-user-id',
               subscription_tier: 'F1'
-            }, 
-            error: null 
+            },
+            error: null
           })
         })
       }),
       insert: (data: any) => ({
         select: () => ({
-          single: () => Promise.resolve({ 
-            data: { ...data, id: 'test-file-id' }, 
-            error: null 
+          single: () => Promise.resolve({
+            data: { ...data, id: 'test-file-id' },
+            error: null
           })
         })
       }),

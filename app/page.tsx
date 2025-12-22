@@ -1,334 +1,133 @@
 
 'use client';
+
+import React, { useState } from 'react';
 import Head from 'next/head';
-import SignIn from '../components/auth/sigin-in';
-import { useState } from 'react';
+import Link from 'next/link';
+import { Icon } from '@iconify/react';
 
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-   return (
+  return (
     <>
       <Head>
-        <title>AZ-Genes - Secure Genetic Data Management on Blockchain</title>
-        <meta name="description" content="Secure, personalized genetic and health data storage and management solutions powered by Hedera blockchain technology" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
+        <title>AZ genes | Secure Genomic Protocol on Hedera</title>
+        <meta name="description" content="Sovereign genomic data management powered by Hedera Hashgraph and decentralized indexing" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        {/* Navigation */}
-        <nav className="bg-white shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 flex items-center">
-                  <span className="text-2xl font-bold text-indigo-600">AZ-Genes</span>
-                </div>
-              </div>
-              
-              {/* Desktop Menu */}
-              <div className="hidden md:flex items-center space-x-8">
-                <a href="#features" className="text-gray-700 hover:text-indigo-600 px-3 py-2 text-sm font-medium transition-colors">Features</a>
-                <a href="#solutions" className="text-gray-700 hover:text-indigo-600 px-3 py-2 text-sm font-medium transition-colors">Solutions</a>
-                <a href="/sign-in" className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 transition-colors">Get Started</a>
-              </div>
+      <div className="antialiased text-slate-400 selection:bg-emerald-500/20 selection:text-emerald-200 min-h-screen relative overflow-x-hidden">
+        <div className="fixed inset-0 z-[-1] bg-grid pointer-events-none h-screen w-full"></div>
 
-              {/* Mobile Menu Button */}
-              <div className="md:hidden flex items-center">
-                <button
-                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                  className="text-gray-700 hover:text-indigo-600 p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-lg"
-                  aria-label="Toggle mobile menu"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    {mobileMenuOpen ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    ) : (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                    )}
-                  </svg>
-                </button>
+        {/* Navigation */}
+        <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-[#020403]/80 backdrop-blur-xl">
+          <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between">
+            <div className="flex items-center gap-8">
+              <Link href="/" className="flex items-center gap-2 group cursor-pointer">
+                <div className="w-7 h-7 rounded-sm bg-emerald-950 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold tracking-tighter text-xs">
+                  AZ
+                </div>
+                <span className="text-slate-200 font-medium tracking-tight text-sm">
+                  genes <span className="text-slate-600 font-normal">/ protocol</span>
+                </span>
+              </Link>
+
+              <div className="hidden md:flex items-center gap-6 text-xs font-medium text-slate-500 transition-opacity duration-300">
+                <Link href="#features" className="hover:text-slate-300">Features</Link>
+                <Link href="#solutions" className="hover:text-slate-300">Solutions</Link>
+                <Link href="/dashboard" className="hover:text-slate-300">Dashboard</Link>
               </div>
             </div>
 
-            {/* Mobile Menu */}
-            {mobileMenuOpen && (
-              <div className="md:hidden py-4 space-y-2 animate-slide-down">
-                <a href="#features" className="block text-gray-700 hover:text-indigo-600 px-3 py-2 text-sm font-medium transition-colors" onClick={() => setMobileMenuOpen(false)}>Features</a>
-                <a href="#solutions" className="block text-gray-700 hover:text-indigo-600 px-3 py-2 text-sm font-medium transition-colors" onClick={() => setMobileMenuOpen(false)}>Solutions</a>
-                <a href="/sign-in" className="block bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 transition-colors text-center" onClick={() => setMobileMenuOpen(false)}>Get Started</a>
+            <div className="flex items-center gap-4">
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/5 border border-emerald-500/10">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-widest">Hedera Mainnet Beta</span>
               </div>
-            )}
+
+              <Link href="/sign-in" className="bg-slate-100 hover:bg-white text-black px-4 py-1.5 rounded text-xs font-medium transition-all flex items-center gap-2 shadow-[0_0_15px_-3px_rgba(255,255,255,0.3)]">
+                <Icon icon="lucide:wallet" width="14" />
+                Connect Wallet
+              </Link>
+            </div>
           </div>
         </nav>
 
         {/* Hero Section */}
-        <section className="py-20 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
-                Secure Your Genetic Future with
-                <span className="text-indigo-600"> Blockchain</span>
-              </h1>
-              <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-                AZ-Genes provides a B2B SaaS platform leveraging Hedera blockchain technology 
-                for secure, private storage and management of genetic and health data.
-              </p>
-              <div className="flex justify-center space-x-4">
-                <a href='/sign-in' className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition duration-300">
-                  Start Free Trial
-                </a>
-                <button className="border border-indigo-600 text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-indigo-50 transition duration-300">
-                  Learn More
-                </button>
+        <section className="pt-32 pb-20 px-6 max-w-[1400px] mx-auto min-h-screen flex flex-col items-center justify-center text-center relative">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none"></div>
+
+          <div className="inline-flex items-center gap-2 px-3 py-1 mb-8 rounded-full bg-emerald-900/20 border border-emerald-500/20 backdrop-blur-sm">
+            <span className="text-[10px] font-mono text-emerald-400">v1.0 Public Release</span>
+            <span className="w-px h-3 bg-emerald-500/20"></span>
+            <a href="#" className="text-[10px] text-emerald-300 hover:text-emerald-200 flex items-center gap-1">
+              Read the Whitepaper <Icon icon="lucide:arrow-right" width="10" />
+            </a>
+          </div>
+
+          <h1 className="text-4xl md:text-6xl lg:text-7xl font-semibold tracking-tighter text-white mb-6 relative z-10">
+            Your DNA. <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-600 text-glow">Sovereign Asset.</span>
+          </h1>
+
+          <p className="text-sm md:text-base text-slate-400 max-w-xl mx-auto mb-10 leading-relaxed relative z-10">
+            Securely house your genomic profile using industry-grade encryption.
+            Verify data integrity on Hedera Hashgraph and manage access through decentralized protocol layers.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center gap-4 relative z-10">
+            <Link href="/sign-up" className="h-10 px-6 rounded bg-emerald-500 hover:bg-emerald-400 text-[#020403] text-sm font-semibold transition-all shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)] flex items-center gap-2">
+              Get Started
+              <Icon icon="lucide:arrow-right" width="16" />
+            </Link>
+            <button className="h-10 px-6 rounded glass-btn text-slate-300 hover:text-white text-sm font-medium flex items-center gap-2">
+              <Icon icon="lucide:play-circle" width="16" />
+              Watch Demo
+            </button>
+          </div>
+
+          {/* Features Grid */}
+          <div id="features" className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-24 w-full max-w-5xl">
+            <div className="glass-panel p-6 rounded-xl text-left hover:border-emerald-500/30 transition-colors group">
+              <div className="w-10 h-10 rounded bg-emerald-900/20 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-110 transition-transform">
+                <Icon icon="lucide:lock" width="20" />
               </div>
+              <h3 className="text-sm font-medium text-white mb-2">Immutable Integrity</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">Every genomic asset is hashed and timestamped on the Hedera Consensus Service, ensuring permanent verifiability.</p>
+            </div>
+            <div className="glass-panel p-6 rounded-xl text-left hover:border-emerald-500/30 transition-colors group">
+              <div className="w-10 h-10 rounded bg-blue-900/20 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-4 group-hover:scale-110 transition-transform">
+                <Icon icon="lucide:database" width="20" />
+              </div>
+              <h3 className="text-sm font-medium text-white mb-2">Decentralized Storage</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">Leverage Supabase and Firestore hybrid layers for secure, low-latency access to your personal biological records.</p>
+            </div>
+            <div className="glass-panel p-6 rounded-xl text-left hover:border-emerald-500/30 transition-colors group">
+              <div className="w-10 h-10 rounded bg-purple-900/20 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 group-hover:scale-110 transition-transform">
+                <Icon icon="lucide:network" width="20" />
+              </div>
+              <h3 className="text-sm font-medium text-white mb-2">Interoperable</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">Import from 23andMe or Ancestry. Export standardized VCF files to any decentralized health dApp.</p>
             </div>
           </div>
-        </section>
 
-        {/* Features Section */}
-        <section id="features" className="py-20 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-                Revolutionary Features
-              </h2>
-              <p className="text-xl text-gray-600">
-                Powered by Hedera Network Blockchain Technology
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {/* Feature 1 */}
-              <div className="bg-white p-8 rounded-xl shadow-lg hover:shadow-xl transition duration-300">
-                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">NFT-Certified Data Storage</h3>
-                <p className="text-gray-600">
-                  Your genetic and health data is securely stored and certified through non-fungible tokens (NFTs), 
-                  ensuring authenticity and ownership.
-                </p>
-              </div>
-
-              {/* Feature 2 */}
-              <div className="bg-white p-8 rounded-xl shadow-lg hover:shadow-xl transition duration-300">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">Controlled Data Sharing</h3>
-                <p className="text-gray-600">
-                  Share your data seamlessly with family, clinicians, and researchers while maintaining complete control 
-                  over access permissions.
-                </p>
-              </div>
-
-              {/* Feature 3 */}
-              <div className="bg-white p-8 rounded-xl shadow-lg hover:shadow-xl transition duration-300">
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">Utility Token Economy</h3>
-                <p className="text-gray-600">
-                  Professionals earn tokens for uploading client data and use tokens to access historical records. 
-                  Create a sustainable ecosystem for genetic data exchange.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Solutions Section */}
-        <section id="solutions" className="py-20 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-                Tailored Solutions
-              </h2>
-              <p className="text-xl text-gray-600">
-                Serving Individuals, Professionals, and Institutions
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-8">
-              {/* Solution 1 - Individuals */}
-              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white p-8 rounded-xl shadow-lg">
-                <h3 className="text-2xl font-bold mb-4">For Individuals & Families</h3>
-                <ul className="space-y-3">
-                  <li className="flex items-start">
-                    <span className="mr-2">✓</span>
-                    <span>Secure personal genetic data storage with NFT certification</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">✓</span>
-                    <span>Controlled sharing with healthcare providers</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">✓</span>
-                    <span>Family health history management</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Solution 2 - Professionals */}
-              <div className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white p-8 rounded-xl shadow-lg">
-                <h3 className="text-2xl font-bold mb-4">For Healthcare Professionals</h3>
-                <ul className="space-y-3">
-                  <li className="flex items-start">
-                    <span className="mr-2">✓</span>
-                    <span>Earn utility tokens for uploading client data</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">✓</span>
-                    <span>NFT professional certification</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">✓</span>
-                    <span>Access comprehensive client health history</span>
-                  </li>
-                </ul>
-              </div>
-
-              {/* Solution 3 - Institutions */}
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 text-white p-8 rounded-xl shadow-lg">
-                <h3 className="text-2xl font-bold mb-4">For Research Institutions</h3>
-                <ul className="space-y-3">
-                  <li className="flex items-start">
-                    <span className="mr-2">✓</span>
-                    <span>NFT institutional certification</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">✓</span>
-                    <span>Anonymous access to data pool for analytics</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">✓</span>
-                    <span>Pay with utility tokens for data access</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Technology Section */}
-        <section className="py-20 bg-gray-900 text-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Powered by Hedera Network
-              </h2>
-              <p className="text-xl text-gray-300">
-                Leveraging enterprise-grade blockchain for unmatched security and performance
-              </p>
-            </div>
-            
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              <div>
-                <h3 className="text-2xl font-bold mb-6">Why Hedera?</h3>
-                <ul className="space-y-4">
-                  <li className="flex items-start">
-                    <span className="mr-3 text-green-400">●</span>
-                    <span>High throughput with low, predictable fees</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-3 text-green-400">●</span>
-                    <span>Energy-efficient proof-of-stake consensus</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-3 text-green-400">●</span>
-                    <span>Enterprise-grade security and stability</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-3 text-green-400">●</span>
-                    <span>Carbon-negative network</span>
-                  </li>
-                </ul>
-              </div>
-              <div className="bg-gray-800 p-8 rounded-xl">
-                <h4 className="text-xl font-semibold mb-4">Blockchain Benefits</h4>
-                <p className="text-gray-300 mb-4">
-                  Our integration with Hedera ensures your genetic data remains:
-                </p>
-                <ul className="space-y-2 text-gray-300">
-                  <li>• Immutable and tamper-proof</li>
-                  <li>• Transparent yet private</li>
-                  <li>• Instantly verifiable</li>
-                  <li>• Globally accessible with permission</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section id="contact" className="py-20 bg-indigo-600 text-white">
-          <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
-            <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              Ready to Secure Your Genetic Data?
-            </h2>
-            <p className="text-xl text-indigo-100 mb-8">
-              Join the future of personalized healthcare data management today.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
-              <button className="bg-white text-indigo-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition duration-300">
-                Start Free Trial
-              </button>
-              <button className="border border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition duration-300">
-                Schedule Demo
-              </button>
-            </div>
+          <div className="mt-20 border-t border-white/5 pt-10 flex flex-wrap justify-center gap-12 grayscale opacity-50">
+            <span className="text-xs font-bold text-slate-600 tracking-[0.2em]">HEDERA</span>
+            <span className="text-xs font-bold text-slate-600 tracking-[0.2em]">FIREBASE</span>
+            <span className="text-xs font-bold text-slate-600 tracking-[0.2em]">SUPABASE</span>
+            <span className="text-xs font-bold text-slate-600 tracking-[0.2em]">NEXTJS</span>
           </div>
         </section>
 
         {/* Footer */}
-        <footer className="bg-gray-800 text-white py-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid md:grid-cols-4 gap-8">
-              <div>
-                <h3 className="text-xl font-bold mb-4">AZ-Genes</h3>
-                <p className="text-gray-400">
-                  Secure genetic data management powered by Hedera blockchain.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold mb-4">Product</h4>
-                <ul className="space-y-2 text-gray-400">
-                  <li><a href="#" className="hover:text-white">Features</a></li>
-                  <li><a href="#" className="hover:text-white">Solutions</a></li>
-                  <li><a href="#" className="hover:text-white">Pricing</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold mb-4">Company</h4>
-                <ul className="space-y-2 text-gray-400">
-                  <li><a href="#" className="hover:text-white">About</a></li>
-                  <li><a href="#" className="hover:text-white">Blog</a></li>
-                  <li><a href="#" className="hover:text-white">Careers</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold mb-4">Legal</h4>
-                <ul className="space-y-2 text-gray-400">
-                  <li><a href="#" className="hover:text-white">Privacy</a></li>
-                  <li><a href="#" className="hover:text-white">Terms</a></li>
-                  <li><a href="#" className="hover:text-white">Security</a></li>
-                </ul>
-              </div>
-            </div>
-            <div className="border-t border-gray-700 mt-8 pt-8 text-center text-gray-400">
-              <p>&copy; 2024 AZ-Genes. All rights reserved.</p>
-            </div>
-          </div>
+        <footer className="border-t border-white/5 py-8 text-center bg-[#020403]">
+          <p className="text-[10px] text-slate-600 font-mono">AZ-genes-protocol v1.0.4 • <span className="text-emerald-500/50">System Operational</span></p>
         </footer>
       </div>
     </>
   );
 }
+

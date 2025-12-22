@@ -18,7 +18,9 @@
   },
   "dependencies": {
     "@hashgraph/hedera-wallet-connect": "^2.0.3",
+    "@hashgraph/proto": "^2.25.0",
     "@hashgraph/sdk": "^2.76.0",
+    "@iconify/react": "^6.0.2",
     "@reown/appkit": "^1.7.16",
     "@reown/appkit-common": "^1.8.12",
     "@reown/walletkit": "^1.4.1",
